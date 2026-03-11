@@ -142,6 +142,10 @@ export default function TVHindelangApp() {
   const [chatInput, setChatInput]       = useState("");
   const chatEndRef = useRef(null);
 
+  // ── CSV Import ──
+  const csvInputRef = useRef(null);
+  const [isImporting, setIsImporting] = useState(false);
+
   // ── ROLES & PERMISSIONS ──
   const isAdmin = userRole === "admin";
   const isTrainer = userRole === "trainer";
@@ -245,6 +249,113 @@ export default function TVHindelangApp() {
   };
 
   const handleLogout = async () => { await signOut(auth); setView("home"); };
+
+  // ── CSV IMPORT LOGIK (DFBNET / BFV) ────────────────────────
+  const handleCSVUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    const reader = new FileReader();
+    
+    // windows-1252 liest die Umlaute von DFB-Exporten meist fehlerfrei
+    reader.onload = async (event) => {
+      const text = event.target.result;
+      const lines = text.split(/\r?\n/).filter(line => line.trim() !== "");
+      if (lines.length < 2) {
+        alert("Die Datei scheint leer zu sein oder hat keine Überschriften.");
+        setIsImporting(false);
+        return;
+      }
+
+      // Prüfe auf Trennzeichen (Komma oder Semikolon)
+      const delimiter = lines[0].includes(";") ? ";" : ",";
+      const headers = lines[0].split(delimiter).map(h => h.trim().replace(/^"|"$/g, '').toLowerCase());
+
+      let count = 0;
+      
+      for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(delimiter).map(v => v.trim().replace(/^"|"$/g, ''));
+        const row = {};
+        headers.forEach((header, index) => { row[header] = values[index] || ""; });
+
+        // Finde die relevanten Spalten unabhängig von der exakten Schreibweise
+        const dateKey = headers.find(h => h.includes("datum") || h === "date" || h === "tag");
+        const timeKey = headers.find(h => h.includes("zeit") || h.includes("anstoß") || h === "time" || h.includes("uhr"));
+        const heimKey = headers.find(h => h.includes("heim") || h.includes("team"));
+        const gastKey = headers.find(h => h.includes("gast") || h.includes("gegner"));
+        const ortKey = headers.find(h => h.includes("ort") || h.includes("stätte"));
+        const spielKey = headers.find(h => h.includes("spiel") || h.includes("begegnung")); // Fallback
+
+        let rawDate = dateKey ? row[dateKey] : "";
+        let rawTime = timeKey ? row[timeKey] : "";
+        let heim = heimKey ? row[heimKey] : "";
+        let gast = gastKey ? row[gastKey] : "";
+        let ort = ortKey ? row[ortKey] : "";
+
+        // Wenn Heim und Gast nicht separat existieren, aber "Spielpaarung"
+        if (!heim && !gast && spielKey) {
+            const parts = row[spielKey].split("-");
+            if (parts.length > 1) {
+                heim = parts[0].trim();
+                gast = parts.slice(1).join("-").trim();
+            } else {
+                heim = row[spielKey];
+            }
+        }
+
+        if (!rawDate || !heim) continue; // Zeile überspringen, wenn leer
+
+        // Datum konvertieren: DD.MM.YYYY zu YYYY-MM-DD
+        let formattedDate = rawDate;
+        if (rawDate.includes(".")) {
+          const parts = rawDate.split(".");
+          if(parts.length === 3) {
+            let year = parts[2].length === 2 ? '20' + parts[2] : parts[2];
+            formattedDate = `${year}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`;
+          }
+        }
+
+        // Uhrzeit konvertieren (z.B. 17.00 zu 17:00)
+        let formattedTime = rawTime.replace(".", ":").substring(0, 5);
+
+        // Titel & eigene Mannschaft erkennen
+        let title = `${heim} vs. ${gast}`;
+        let teamName = heim; // Standardmäßig das Heimteam
+        
+        if (heim.toLowerCase().includes("hindelang") || heim.toLowerCase().includes("tvh")) {
+          title = `Heimspiel vs. ${gast}`;
+          teamName = heim;
+        } else if (gast.toLowerCase().includes("hindelang") || gast.toLowerCase().includes("tvh")) {
+          title = `Auswärtsspiel bei ${heim}`;
+          teamName = gast;
+        }
+
+        const newEvent = {
+          type: "game",
+          title: title,
+          date: formattedDate,
+          time: formattedTime,
+          endTime: "",
+          location: ort,
+          notes: "Automatisch importiert",
+          team: teamName,
+          bus1: false,
+          bus2: false,
+          declines: [],
+          createdAt: serverTimestamp()
+        };
+
+        await addDoc(collection(db, "events"), newEvent);
+        count++;
+      }
+      
+      alert(`${count} Spiele wurden erfolgreich in den Kalender importiert! Die Busse kannst du jetzt per "Bearbeiten" (✏️) hinzufügen.`);
+      setIsImporting(false);
+      if (csvInputRef.current) csvInputRef.current.value = ""; // Input zurücksetzen
+    };
+    reader.readAsText(file, "windows-1252");
+  };
 
   // ── WHATSAPP SHARE LOGIK ──
   const shareEventWhatsApp = (ev) => {
@@ -417,7 +528,7 @@ export default function TVHindelangApp() {
   };
 
   const deleteUser = async (id) => {
-    if (window.confirm("Möchtest du diesen Benutzer aus der App entfernen?")) {
+    if (window.confirm("Möchtest du diesen Benutzer unwiderruflich aus der App entfernen?")) {
       await deleteDoc(doc(db,"users",id));
     }
   };
@@ -1043,7 +1154,16 @@ export default function TVHindelangApp() {
               <div>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
                   <div style={{fontSize:16,fontWeight:800,letterSpacing:1,textTransform:"uppercase"}}>Termine ({events.length})</div>
-                  <button className="btn btn-primary" onClick={()=>openAddEvent()}>+ Termin hinzufügen</button>
+                  
+                  {/* CSV IMPORT BUTTON */}
+                  <div style={{display:"flex", gap: 10}}>
+                    <input type="file" accept=".csv" style={{display: "none"}} ref={csvInputRef} onChange={handleCSVUpload} />
+                    <button className="btn btn-ghost" onClick={() => csvInputRef.current?.click()} disabled={isImporting}>
+                      {isImporting ? "⏳ Importiere..." : "📥 CSV Importieren"}
+                    </button>
+                    <button className="btn btn-primary" onClick={()=>openAddEvent()}>+ Termin hinzufügen</button>
+                  </div>
+                  
                 </div>
                 <div style={{display:"flex",flexDirection:"column",gap:8}}>
                   {[...events].sort((a,b)=>a.date?.localeCompare(b.date)).map(ev=>{
@@ -1097,7 +1217,7 @@ export default function TVHindelangApp() {
                         </div>
                         <div style={{display:"flex",gap:6,flexShrink:0}}>
                           <button className="btn btn-edit" style={{background:"#25D366", color:"white"}} onClick={()=>shareNewsWhatsApp(n)} title="In WhatsApp teilen">📲 WA</button>
-                          <button className="btn btn-edit" onClick={()=>openEditNews(n)}>✏️</button>
+                          <button className="btn btn-edit" onClick={()=>openEditEvent(n)}>✏️</button>
                           <button className="btn btn-danger" onClick={()=>deleteNews(n.id)}>🗑️</button>
                         </div>
                       </div>
@@ -1107,6 +1227,7 @@ export default function TVHindelangApp() {
               </div>
             )}
 
+            {/* Benutzerverwaltung Content */}
             {adminSection==="users"&&isAdmin&&(
               <div>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
