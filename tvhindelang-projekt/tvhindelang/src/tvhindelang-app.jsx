@@ -7,6 +7,9 @@ import {
 import {
   getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged
 } from "firebase/auth";
+import {
+  getStorage, ref, uploadBytes, getDownloadURL
+} from "firebase/storage";
 
 // ─── FIREBASE ────────────────────────────────────────────────
 const firebaseConfig = {
@@ -19,8 +22,9 @@ const firebaseConfig = {
   appId: "1:719897877586:web:de42747cfe009aa2c7138b"
 };
 const firebaseApp = initializeApp(firebaseConfig);
-const db   = getFirestore(firebaseApp);
-const auth = getAuth(firebaseApp);
+const db      = getFirestore(firebaseApp);
+const auth    = getAuth(firebaseApp);
+const storage = getStorage(firebaseApp);
 
 // ─── BRAND ───────────────────────────────────────────────────
 const B = {
@@ -112,9 +116,13 @@ export default function TVHindelangApp() {
   const [showEventModal, setShowEventModal] = useState(false);
   const [editingEvent, setEditingEvent]     = useState(null);
   const [eventForm, setEventForm]           = useState(emptyEvent());
+  
   const [showNewsModal, setShowNewsModal]   = useState(false);
   const [editingNews, setEditingNews]       = useState(null);
-  const [newsForm, setNewsForm]             = useState({ title:"", body:"" });
+  // NewsForm erweitert für Datei-Upload
+  const [newsForm, setNewsForm]             = useState({ title:"", body:"", fileUrl:"", fileName:"", fileObj:null });
+  const [newsSaving, setNewsSaving]         = useState(false);
+
   const [showTeamModal, setShowTeamModal]   = useState(false);
   const [editingTeam, setEditingTeam]       = useState(null);
   const [teamForm, setTeamForm]             = useState({ name:"", trainer:"", training:"", jahrgang:"" });
@@ -141,7 +149,6 @@ export default function TVHindelangApp() {
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         setUser(firebaseUser);
-        // load role from Firestore
         try {
           const { getDoc, doc: docRef } = await import("firebase/firestore");
           const snap = await getDoc(docRef(db, "users", firebaseUser.uid));
@@ -214,14 +221,59 @@ export default function TVHindelangApp() {
   const deleteEvent = async (id) => { await deleteDoc(doc(db,"events",id)); };
 
   // ── News CRUD ────────────────────────────────────────────
-  const openAddNews = () => { setEditingNews(null); setNewsForm({title:"",body:""}); setShowNewsModal(true); };
-  const openEditNews = (n) => { setEditingNews(n); setNewsForm({title:n.title,body:n.body}); setShowNewsModal(true); };
+  const openAddNews = () => { 
+    setEditingNews(null); 
+    setNewsForm({title:"", body:"", fileUrl:"", fileName:"", fileObj:null}); 
+    setShowNewsModal(true); 
+  };
+  const openEditNews = (n) => { 
+    setEditingNews(n); 
+    setNewsForm({title:n.title, body:n.body, fileUrl:n.fileUrl||"", fileName:n.fileName||"", fileObj:null}); 
+    setShowNewsModal(true); 
+  };
+  
   const saveNews = async () => {
-    if (!newsForm.title||!newsForm.body) return;
-    if (editingNews) await updateDoc(doc(db,"news",editingNews.id), newsForm);
-    else await addDoc(collection(db,"news"), {...newsForm, date:todayStr, author: user?.email||"Admin", createdAt:serverTimestamp()});
+    if (!newsForm.title || !newsForm.body) return;
+    setNewsSaving(true);
+    
+    let finalFileUrl = newsForm.fileUrl;
+    let finalFileName = newsForm.fileName;
+
+    // Wenn eine neue Datei ausgewählt wurde, lade sie hoch
+    if (newsForm.fileObj) {
+      try {
+        const fileRef = ref(storage, `news/${Date.now()}_${newsForm.fileObj.name}`);
+        await uploadBytes(fileRef, newsForm.fileObj);
+        finalFileUrl = await getDownloadURL(fileRef);
+        finalFileName = newsForm.fileObj.name;
+      } catch (err) {
+        console.error("Fehler beim Upload:", err);
+        // Alert oder Fehlerbehandlung optional hier
+      }
+    }
+
+    const newsData = {
+      title: newsForm.title,
+      body: newsForm.body,
+      fileUrl: finalFileUrl,
+      fileName: finalFileName
+    };
+
+    if (editingNews) {
+      await updateDoc(doc(db,"news",editingNews.id), newsData);
+    } else {
+      await addDoc(collection(db,"news"), {
+        ...newsData, 
+        date:todayStr, 
+        author: user?.email||"Admin", 
+        createdAt:serverTimestamp()
+      });
+    }
+    
+    setNewsSaving(false);
     setShowNewsModal(false);
   };
+  
   const deleteNews = async (id) => { await deleteDoc(doc(db,"news",id)); };
 
   // ── Team CRUD ────────────────────────────────────────────
@@ -376,6 +428,7 @@ export default function TVHindelangApp() {
         .admin-tab{background:none;border:none;border-bottom:2px solid transparent;padding:10px 18px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:1px;text-transform:uppercase;color:${B.midGrey};transition:all .2s;}
         .admin-tab:hover{color:${B.amber};} .admin-tab.active{color:${B.amber};border-bottom-color:${B.amber};}
         select.input option{background:white;} textarea.input{resize:vertical;min-height:80px;}
+        input[type="file"].input { padding: 6px 10px; font-size: 13px; }
       `}</style>
 
       {/* ── HEADER ── */}
@@ -495,7 +548,12 @@ export default function TVHindelangApp() {
                   <div key={n.id} style={{padding:"10px 12px",background:B.amberLight,borderRadius:8,borderLeft:`3px solid ${B.amber}`}}>
                     <div style={{fontWeight:800,fontSize:14,marginBottom:3}}>{n.title}</div>
                     <div style={{fontSize:12,color:B.charcoal,fontFamily:"'Barlow',sans-serif",lineHeight:1.5}}>{n.body?.slice(0,90)}{(n.body?.length||0)>90?"…":""}</div>
-                    <div style={{fontSize:10,color:B.midGrey,marginTop:4,fontWeight:600}}>{n.date} · {n.author}</div>
+                    {n.fileUrl && (
+                      <a href={n.fileUrl} target="_blank" rel="noopener noreferrer" style={{display:"inline-block", marginTop:6, fontSize:11, fontWeight:700, color:B.amber, textDecoration:"none", borderBottom:`1px solid ${B.amber}`}}>
+                        📎 {n.fileName}
+                      </a>
+                    )}
+                    <div style={{fontSize:10,color:B.midGrey,marginTop:6,fontWeight:600}}>{n.date} · {n.author}</div>
                   </div>
                 ))}
               </div>
@@ -803,6 +861,11 @@ export default function TVHindelangApp() {
                         <div style={{flex:1}}>
                           <div style={{fontWeight:800,fontSize:16,marginBottom:4}}>{n.title}</div>
                           <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif",lineHeight:1.5,marginBottom:6}}>{n.body}</div>
+                          {n.fileUrl && (
+                            <a href={n.fileUrl} target="_blank" rel="noopener noreferrer" style={{display:"inline-block", marginBottom:6, fontSize:12, fontWeight:700, color:B.amber, textDecoration:"none", borderBottom:`1px solid ${B.amber}`}}>
+                              📎 {n.fileName}
+                            </a>
+                          )}
                           <div style={{fontSize:11,color:B.midGrey,fontWeight:600}}>{n.date} · {n.author}</div>
                         </div>
                         <div style={{display:"flex",gap:6,flexShrink:0}}>
@@ -918,9 +981,27 @@ export default function TVHindelangApp() {
               <div><label style={LBL}>Text *</label>
                 <textarea className="input" style={{minHeight:100}} value={newsForm.body} onChange={e=>setNewsForm({...newsForm,body:e.target.value})}/>
               </div>
-              <div style={{display:"flex",gap:10,marginTop:4}}>
-                <button className="btn btn-ghost" style={{flex:1}} onClick={()=>setShowNewsModal(false)}>Abbrechen</button>
-                <button className="btn btn-primary" style={{flex:2}} onClick={saveNews} disabled={!newsForm.title||!newsForm.body}>{editingNews?"✓ Speichern":"📢 Veröffentlichen"}</button>
+              
+              <div><label style={LBL}>Dateianhang (PDF, DOCX)</label>
+                <input className="input" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx" 
+                  onChange={e=>setNewsForm({...newsForm, fileObj: e.target.files[0]})} />
+                {newsForm.fileName && !newsForm.fileObj && (
+                  <div style={{fontSize:12, color:B.charcoal, marginTop:6}}>
+                    Aktueller Anhang: <a href={newsForm.fileUrl} target="_blank" rel="noopener noreferrer" style={{color:B.teal, fontWeight:700}}>{newsForm.fileName}</a>
+                  </div>
+                )}
+                {newsForm.fileObj && (
+                  <div style={{fontSize:12, color:B.charcoal, marginTop:6}}>
+                    Ausgewählt: <span style={{fontWeight:700}}>{newsForm.fileObj.name}</span>
+                  </div>
+                )}
+              </div>
+
+              <div style={{display:"flex",gap:10,marginTop:8}}>
+                <button className="btn btn-ghost" style={{flex:1}} onClick={()=>setShowNewsModal(false)} disabled={newsSaving}>Abbrechen</button>
+                <button className="btn btn-primary" style={{flex:2}} onClick={saveNews} disabled={!newsForm.title||!newsForm.body||newsSaving}>
+                  {newsSaving ? "Wird hochgeladen..." : (editingNews ? "✓ Speichern" : "📢 Veröffentlichen")}
+                </button>
               </div>
             </div>
           </div>
