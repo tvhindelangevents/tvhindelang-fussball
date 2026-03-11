@@ -53,12 +53,14 @@ const DAYS   = ["Mo","Di","Mi","Do","Fr","Sa","So"];
 const MONTHS = ["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
 const typeOf = (v) => EVENT_TYPES.find(t=>t.value===v)||EVENT_TYPES[3];
 
-// Wird nur beim allerersten Laden genutzt, danach überschreibt die Datenbank dies
+// Leere Startliste (wird aus der DB geladen)
 const INIT_TEAMS = []; 
 
 const INIT_INTRO = "Die Fußballabteilung des TV Hindelang e.V. vereint alle aktiven Mannschaften. Hier findet ihr Termine, Spielpläne und Vereinsnews an einem Ort.";
 
 const emptyEvent = (date="") => ({ type:"training", title:"", date, time:"17:00", endTime:"", location:"", notes:"", team:"Herren", bus1:false, bus2:false });
+const emptyTeamForm = () => ({ name: "", trainers: [{ name: "", phone: "" }], training: "", jahrgang: "" });
+
 const LBL = { fontSize:11, fontWeight:700, letterSpacing:1, color:B.midGrey, textTransform:"uppercase", display:"block", marginBottom:5 };
 
 const PineLogo = ({ size=36 }) => (
@@ -72,6 +74,14 @@ const PineLogo = ({ size=36 }) => (
 const Chip = ({ bg, c, border, children }) => (
   <span style={{display:"inline-block",padding:"2px 9px",borderRadius:20,fontSize:11,fontWeight:700,letterSpacing:.8,textTransform:"uppercase",background:bg,color:c,border:border||"none"}}>{children}</span>
 );
+
+// Hilfsfunktion zur Darstellung der Trainernamen als Text
+const getTrainerNames = (team) => {
+  if (team.trainers && team.trainers.length > 0) {
+    return team.trainers.map(tr => tr.name).filter(Boolean).join(", ") || "N.N.";
+  }
+  return team.trainer || "N.N."; // Fallback für alte Daten
+};
 
 // ─── MAIN ────────────────────────────────────────────────────
 export default function TVHindelangApp() {
@@ -113,7 +123,7 @@ export default function TVHindelangApp() {
 
   const [showTeamModal, setShowTeamModal]   = useState(false);
   const [editingTeam, setEditingTeam]       = useState(null);
-  const [teamForm, setTeamForm]             = useState({ name:"", trainer:"", training:"", jahrgang:"" });
+  const [teamForm, setTeamForm]             = useState(emptyTeamForm());
   
   const [showNewThread, setShowNewThread]   = useState(false);
   const [newThreadType, setNewThreadType]   = useState("group");
@@ -174,11 +184,9 @@ export default function TVHindelangApp() {
     unsubs.push(onSnapshot(query(collection(db,"events"), orderBy("date")), snap => {
       setEvents(snap.docs.map(d=>({id:d.id,...d.data()})));
     }));
-    
     unsubs.push(onSnapshot(collection(db,"teams"), snap => {
       setTeams(snap.docs.map(d=>({id:d.id,...d.data()})));
     }));
-    
     unsubs.push(onSnapshot(query(collection(db,"news"), orderBy("date","desc")), snap => {
       setNews(snap.docs.map(d=>({id:d.id,...d.data()})));
     }));
@@ -258,12 +266,36 @@ export default function TVHindelangApp() {
   const deleteNews = async (id) => { await deleteDoc(doc(db,"news",id)); };
 
   // ── Team CRUD ────────────────────────────────────────────
-  const openAddTeam  = () => { setEditingTeam(null); setTeamForm({name:"",trainer:"",training:"",jahrgang:""}); setShowTeamModal(true); };
-  const openEditTeam = (t) => { setEditingTeam(t); setTeamForm({name:t.name,trainer:t.trainer,training:t.training,jahrgang:t.jahrgang}); setShowTeamModal(true); };
+  const openAddTeam  = () => { 
+    setEditingTeam(null); 
+    setTeamForm(emptyTeamForm()); 
+    setShowTeamModal(true); 
+  };
+  const openEditTeam = (t) => { 
+    setEditingTeam(t); 
+    let loadedTrainers = t.trainers || [];
+    // Fallback für alte Daten (wenn nur ein String 'trainer' vorlag)
+    if (loadedTrainers.length === 0 && t.trainer) {
+      loadedTrainers = [{ name: t.trainer, phone: "" }];
+    } else if (loadedTrainers.length === 0) {
+      loadedTrainers = [{ name: "", phone: "" }];
+    }
+    setTeamForm({
+      name: t.name, 
+      trainers: loadedTrainers, 
+      training: t.training || "", 
+      jahrgang: t.jahrgang || ""
+    }); 
+    setShowTeamModal(true); 
+  };
   const saveTeam = async () => {
     if (!teamForm.name) return;
-    if (editingTeam) await updateDoc(doc(db,"teams",editingTeam.id), teamForm);
-    else await addDoc(collection(db,"teams"), teamForm);
+    // Leere Trainer-Einträge entfernen
+    const cleanTrainers = teamForm.trainers.filter(tr => tr.name.trim() !== "");
+    const finalData = { ...teamForm, trainers: cleanTrainers };
+
+    if (editingTeam) await updateDoc(doc(db,"teams",editingTeam.id), finalData);
+    else await addDoc(collection(db,"teams"), finalData);
     setShowTeamModal(false);
   };
   const deleteTeam = async (id) => { await deleteDoc(doc(db,"teams",id)); };
@@ -703,7 +735,7 @@ export default function TVHindelangApp() {
                     <div style={{fontSize:22,fontWeight:900,letterSpacing:1}}>{ti.name}</div>
                     <span style={{display:"inline-block",padding:"2px 9px",borderRadius:20,fontSize:11,fontWeight:700,background:B.tealLight,color:B.teal}}>{ti.jahrgang}</span>
                   </div>
-                  <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif",marginBottom:4}}>👤 <strong>Trainer:</strong> {ti.trainer}</div>
+                  <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif",marginBottom:4}}>👤 <strong>Trainer:</strong> {getTrainerNames(ti)}</div>
                   <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif"}}>⏰ {ti.training}</div>
                   <div style={{marginTop:12,fontSize:11,color:B.teal,fontWeight:700}}>Details →</div>
                 </div>
@@ -722,7 +754,31 @@ export default function TVHindelangApp() {
                 </div>
                 {isAdmin&&<button className="btn btn-edit" onClick={()=>openEditTeam(selectedTeam)}>✏️ Bearbeiten</button>}
               </div>
-              {[{icon:"👤",label:"Trainer",val:selectedTeam.trainer},{icon:"⏰",label:"Trainingszeiten",val:selectedTeam.training},{icon:"🎂",label:"Jahrgang",val:selectedTeam.jahrgang}].map(row=>(
+
+              {/* TRAINER DETAILS */}
+              <div style={{display:"flex",gap:16,alignItems:"flex-start",padding:"14px 0",borderBottom:`1px solid ${B.lightGrey}`}}>
+                <div style={{width:36,height:36,borderRadius:"50%",background:B.tealLight,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>👤</div>
+                <div>
+                  <div style={{fontSize:11,fontWeight:700,letterSpacing:1,color:B.midGrey,textTransform:"uppercase",marginBottom:4}}>Trainer</div>
+                  {selectedTeam.trainers && selectedTeam.trainers.length > 0 ? (
+                    selectedTeam.trainers.map((tr, idx) => (
+                      <div key={idx} style={{marginBottom: idx === selectedTeam.trainers.length - 1 ? 0 : 10}}>
+                        <div style={{fontSize:15,fontWeight:700,fontFamily:"'Barlow',sans-serif"}}>{tr.name || "N.N."}</div>
+                        {tr.phone && (
+                          <div style={{fontSize:13,fontFamily:"'Barlow',sans-serif",marginTop:2}}>
+                            📞 <a href={`tel:${tr.phone}`} style={{color:B.teal,textDecoration:"none",fontWeight:500}}>{tr.phone}</a>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{fontSize:15,fontWeight:700,fontFamily:"'Barlow',sans-serif"}}>{selectedTeam.trainer || 'N.N.'}</div>
+                  )}
+                </div>
+              </div>
+
+              {/* TRAININGSZEITEN & JAHRGANG */}
+              {[{icon:"⏰",label:"Trainingszeiten",val:selectedTeam.training},{icon:"🎂",label:"Jahrgang",val:selectedTeam.jahrgang}].map(row=>(
                 <div key={row.label} style={{display:"flex",gap:16,alignItems:"center",padding:"14px 0",borderBottom:`1px solid ${B.lightGrey}`}}>
                   <div style={{width:36,height:36,borderRadius:"50%",background:B.tealLight,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>{row.icon}</div>
                   <div>
@@ -731,6 +787,7 @@ export default function TVHindelangApp() {
                   </div>
                 </div>
               ))}
+
               <div style={{marginTop:20}}>
                 <div style={{fontSize:12,fontWeight:700,letterSpacing:1,color:B.midGrey,textTransform:"uppercase",marginBottom:10}}>Nächste Termine</div>
                 {events.filter(e=>e.team===selectedTeam.name&&e.date>=todayStr).sort((a,b)=>a.date?.localeCompare(b.date)).slice(0,4).map(ev=><EventCard key={ev.id} ev={ev} controls={false}/>)}
@@ -837,7 +894,7 @@ export default function TVHindelangApp() {
                   {teams.map(t=>(
                     <div key={t.id} className="card" style={{display:"grid",gridTemplateColumns:"160px 1fr 1fr 1fr auto",gap:16,alignItems:"center",padding:"14px 18px"}}>
                       <div style={{fontWeight:800,fontSize:16}}>{t.name}</div>
-                      <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif"}}>👤 {t.trainer}</div>
+                      <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif"}}>👤 {getTrainerNames(t)}</div>
                       <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif"}}>⏰ {t.training}</div>
                       <div style={{fontSize:13,color:B.midGrey,fontFamily:"'Barlow',sans-serif"}}>🎂 {t.jahrgang}</div>
                       <div style={{display:"flex",gap:6}}>
@@ -1085,13 +1142,14 @@ export default function TVHindelangApp() {
         </div>
       )}
 
-      {/* ════ TEAM MODAL ════ */}
+      {/* ════ TEAM MODAL MIT MEHREREN TRAINERN ════ */}
       {showTeamModal&&(
         <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&setShowTeamModal(false)}>
           <div className="modal">
             <div style={{height:4,background:`linear-gradient(90deg,${B.green},${B.teal})`,borderRadius:"4px 4px 0 0",margin:"-30px -30px 22px"}}/>
             <h2 style={{fontSize:22,fontWeight:900,letterSpacing:1,textTransform:"uppercase",marginBottom:20}}>{editingTeam?"Mannschaft bearbeiten":"Neue Mannschaft"}</h2>
             <div style={{display:"flex",flexDirection:"column",gap:13}}>
+              
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
                 <div><label style={LBL}>Name *</label>
                   <input className="input" placeholder="z.B. G-Jugend" value={teamForm.name} onChange={e=>setTeamForm({...teamForm,name:e.target.value})}/>
@@ -1100,12 +1158,39 @@ export default function TVHindelangApp() {
                   <input className="input" placeholder="z.B. 2021/2022" value={teamForm.jahrgang} onChange={e=>setTeamForm({...teamForm,jahrgang:e.target.value})}/>
                 </div>
               </div>
-              <div><label style={LBL}>Trainer</label>
-                <input className="input" placeholder="z.B. Hans Mustermann" value={teamForm.trainer} onChange={e=>setTeamForm({...teamForm,trainer:e.target.value})}/>
+
+              {/* DYNAMISCHE TRAINER LISTE */}
+              <div>
+                <label style={LBL}>Trainer & Betreuer</label>
+                {teamForm.trainers.map((tr, idx) => (
+                  <div key={idx} style={{display:"flex", gap:8, marginBottom:8}}>
+                    <input className="input" placeholder="Name" value={tr.name} onChange={e => {
+                      const newTr = [...teamForm.trainers];
+                      newTr[idx].name = e.target.value;
+                      setTeamForm({...teamForm, trainers: newTr});
+                    }} />
+                    <input className="input" placeholder="Telefon" value={tr.phone} onChange={e => {
+                      const newTr = [...teamForm.trainers];
+                      newTr[idx].phone = e.target.value;
+                      setTeamForm({...teamForm, trainers: newTr});
+                    }} />
+                    {teamForm.trainers.length > 1 && (
+                      <button className="btn btn-danger" style={{padding:"0 12px", fontSize:14}} onClick={() => {
+                        const newTr = teamForm.trainers.filter((_, i) => i !== idx);
+                        setTeamForm({...teamForm, trainers: newTr});
+                      }}>X</button>
+                    )}
+                  </div>
+                ))}
+                <button className="btn btn-ghost" style={{fontSize:11, padding:"6px 12px", marginTop:2}} onClick={() => setTeamForm({...teamForm, trainers: [...teamForm.trainers, {name:"", phone:""}]})}>
+                  + Weiterer Trainer
+                </button>
               </div>
+
               <div><label style={LBL}>Trainingszeiten</label>
                 <input className="input" placeholder="z.B. Di & Do 17:00 Uhr" value={teamForm.training} onChange={e=>setTeamForm({...teamForm,training:e.target.value})}/>
               </div>
+              
               <div style={{display:"flex",gap:10,marginTop:4}}>
                 <button className="btn btn-ghost" style={{flex:1}} onClick={()=>setShowTeamModal(false)}>Abbrechen</button>
                 <button className="btn btn-primary" style={{flex:2}} onClick={saveTeam} disabled={!teamForm.name}>{editingTeam?"✓ Speichern":"+ Erstellen"}</button>
