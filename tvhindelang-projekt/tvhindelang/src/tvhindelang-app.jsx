@@ -373,6 +373,7 @@ export default function TVHindelangApp() {
     await updateDoc(doc(db, "events", ev.id), { declines: newDeclines });
   };
 
+  // ── Event CRUD & RECURRING LOGIK ───────────────────────────────────────────
   const openAddEvent = (date="") => { setEditingEvent(null); setEventForm(emptyEvent(date)); setShowEventModal(true); };
   const openEditEvent = (ev) => { 
     setEditingEvent(ev); 
@@ -634,9 +635,9 @@ export default function TVHindelangApp() {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800;900&family=Barlow:wght@400;500;600&display=swap');
         *{box-sizing:border-box;margin:0;padding:0;}
-        html, body { height: 100%; width: 100%; margin: 0; padding: 0; overflow: hidden; }
+        html, body { height: 100%; width: 100%; margin: 0; padding: 0; }
         
-        .app-container { display: flex; flex-direction: column; height: 100vh; }
+        .app-container { display: flex; flex-direction: column; min-height: 100vh; min-height: 100dvh; }
         .main-wrapper { flex: 1; overflow-y: auto; padding: 28px 24px; }
         
         /* Unsichtbare, aber nutzbare Scrollbars für sauberes Wischen */
@@ -693,7 +694,7 @@ export default function TVHindelangApp() {
           .top-nav-links { display: none !important; }
           .header-right { margin-left: auto; }
           
-          .bottom-nav { display: flex; position: fixed; bottom: 0; left: 0; right: 0; background: ${B.white}; border-top: 1.5px solid ${B.lightGrey}; z-index: 1000; padding-bottom: env(safe-area-inset-bottom); justify-content: space-around; box-shadow: 0 -4px 20px rgba(0,0,0,0.05); }
+          .bottom-nav { display: flex !important; position: fixed; bottom: 0; left: 0; width: 100%; background: ${B.white}; border-top: 1.5px solid ${B.lightGrey}; z-index: 9999; padding-bottom: max(12px, env(safe-area-inset-bottom)); justify-content: space-around; box-shadow: 0 -4px 20px rgba(0,0,0,0.08); }
           .bottom-nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px 0 8px 0; color: ${B.midGrey}; font-family: 'Barlow Condensed', sans-serif; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; border: none; background: none; cursor: pointer; transition: color .2s;}
           .bottom-nav-item.active { color: ${B.teal}; }
           .bottom-nav-icon { font-size: 22px; margin-bottom: 2px; }
@@ -1307,15 +1308,24 @@ export default function TVHindelangApp() {
         )}
       </main>
 
-      {/* ── FOOTER ── */}
-      <footer style={{background:B.white,borderTop:`1.5px solid ${B.lightGrey}`,padding:"10px 24px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
-        <div style={{fontSize:11,color:B.midGrey,fontWeight:600}}>© TV Hindelang Fussball</div>
-        <div style={{display:"flex",gap:20}}>
-          {[["Impressum","https://share.google/fPlP9Wjcsvyabws2C"],["Datenschutz","https://share.google/887uLP0KRXJTx68Ws"]].map(([label,url])=>(
-            <a key={label} href={url} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:B.midGrey,fontWeight:700,letterSpacing:1,textTransform:"uppercase",textDecoration:"none"}}>{label}</a>
-          ))}
-        </div>
-      </footer>
+      {/* ── MOBILE BOTTOM NAV ── */}
+      <nav className="bottom-nav">
+        {NAV.map(({id,icon,label})=>(
+          <button key={id} className={`bottom-nav-item ${view===id?"active":""}`} onClick={()=>{setView(id);setSelectedTeam(null); setActiveThread(null);}}>
+            <div className="bottom-nav-icon">{icon}</div>
+            {label}
+          </button>
+        ))}
+        {canAccessAdmin&&(
+          <button className={`bottom-nav-item ${view==="admin"?"active":""}`} onClick={()=>{
+            setView("admin");
+            if(isTrainer && !isAdmin && adminSection !== "events" && adminSection !== "news") setAdminSection("events");
+          }}>
+            <div className="bottom-nav-icon">⚙️</div>
+            Admin
+          </button>
+        )}
+      </nav>
 
       {/* ════ EVENT MODAL ════ */}
       {showEventModal&&(
