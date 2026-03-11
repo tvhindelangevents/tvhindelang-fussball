@@ -158,7 +158,13 @@ export default function TVHindelangApp() {
   const startOffset = (() => { const d=new Date(year,month,1).getDay(); return d===0?6:d-1; })();
   const daysInMonth = new Date(year,month+1,0).getDate();
   const todayStr = new Date().toISOString().slice(0,10);
-  const teamNames = ["Alle Mannschaften", ...teams.map(t=>t.name)];
+
+  // DYNAMISCHE FILTER-LISTE: Sammelt Teams aus der Datenbank UND aus importierten Terminen
+  const uniqueTeams = Array.from(new Set([
+    ...teams.map(t => t.name),
+    ...events.map(e => e.team).filter(Boolean)
+  ])).sort();
+  const teamNames = ["Alle Mannschaften", ...uniqueTeams];
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -217,7 +223,6 @@ export default function TVHindelangApp() {
 
   const handleLogout = async () => { await signOut(auth); setView("home"); };
 
-  // ── CSV IMPORT LOGIK ────────────────────────
   const handleCSVUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -367,7 +372,6 @@ export default function TVHindelangApp() {
     await updateDoc(doc(db, "events", ev.id), { declines: newDeclines });
   };
 
-  // ── Event CRUD & RECURRING LOGIK ───────────────────────────────────────────
   const openAddEvent = (date="") => { setEditingEvent(null); setEventForm(emptyEvent(date)); setShowEventModal(true); };
   const openEditEvent = (ev) => { 
     setEditingEvent(ev); 
@@ -496,7 +500,8 @@ export default function TVHindelangApp() {
     setShowNewThread(false); setNewThreadName("");
   };
 
-  const matchesFilter = (ev) => filterTeam==="Alle Mannschaften"||ev.team===filterTeam||ev.team==="Alle Mannschaften";
+  // FILTER LOGIK
+  const matchesFilter = (ev) => filterTeam === "Alle Mannschaften" || ev.team === filterTeam;
   const getDay = (day) => { const d=`${year}-${String(month+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`; return events.filter(e=>e.date===d&&matchesFilter(e)); };
   const selectedStr = selectedDay ? `${year}-${String(month+1).padStart(2,"0")}-${String(selectedDay).padStart(2,"0")}` : "";
   const selectedEvs = selectedDay ? events.filter(e=>e.date===selectedStr&&matchesFilter(e)).sort((a,b)=>(a.time||"").localeCompare(b.time||"")) : [];
@@ -577,7 +582,6 @@ export default function TVHindelangApp() {
     </div>
   );
 
-  // ─── LOGIN & REGISTER SCREEN ────────────────────────────────────────────────
   if (!user) return (
     <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:B.offWhite,fontFamily:"'Barlow Condensed',sans-serif", padding: 20}}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=Barlow:wght@400;500&display=swap');*{box-sizing:border-box;margin:0;padding:0;}.input{background:#fff;border:1.5px solid ${B.lightGrey};color:${B.anthracite};border-radius:8px;padding:9px 13px;font-family:'Barlow',sans-serif;font-size:14px;width:100%;outline:none;transition:border-color .2s;}.input:focus{border-color:${B.teal};}.btn{border:none;border-radius:7px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:1px;text-transform:uppercase;transition:all .18s;}.btn-primary{background:${B.teal};color:white;padding:10px 22px;font-size:14px;}.btn-primary:hover{background:${B.tealDark};}.btn-primary:disabled{background:${B.lightGrey};color:${B.midGrey};cursor:not-allowed;}`}</style>
@@ -665,7 +669,7 @@ export default function TVHindelangApp() {
         .chat-me { background:${B.teal};color:white;border-radius:14px 14px 2px 14px;padding:9px 14px;max-width:78%;align-self:flex-end;font-size:14px;font-family:'Barlow',sans-serif; }
         .chat-them { background:${B.white};border:1.5px solid ${B.lightGrey};border-radius:14px 14px 14px 2px;padding:9px 14px;max-width:78%;align-self:flex-start;font-size:14px;font-family:'Barlow',sans-serif; }
         
-        .pill { border:none;border-radius:20px;padding:5px 13px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;letter-spacing:.8px;text-transform:uppercase;white-space:nowrap;transition:all .15s; flex-shrink: 0;}
+        .pill { border:none;border-radius:20px;padding:6px 14px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:.8px;text-transform:uppercase;white-space:nowrap;transition:all .15s; flex-shrink: 0;}
         .admin-tab { background:none;border:none;border-bottom:2px solid transparent;padding:10px 18px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:1px;text-transform:uppercase;color:${B.midGrey};transition:all .2s; white-space: nowrap;}
         .admin-tab:hover { color:${B.amber}; } .admin-tab.active{color:${B.amber};border-bottom-color:${B.amber};}
         
@@ -685,13 +689,11 @@ export default function TVHindelangApp() {
           .top-nav-links { display: none !important; }
           .header-right { margin-left: auto; }
           
-          /* Bottom App Bar */
           .bottom-nav { display: flex; position: fixed; bottom: 0; left: 0; right: 0; background: ${B.white}; border-top: 1.5px solid ${B.lightGrey}; z-index: 1000; padding-bottom: env(safe-area-inset-bottom); justify-content: space-around; box-shadow: 0 -4px 20px rgba(0,0,0,0.05); }
           .bottom-nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px 0 8px 0; color: ${B.midGrey}; font-family: 'Barlow Condensed', sans-serif; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; border: none; background: none; cursor: pointer; transition: color .2s;}
           .bottom-nav-item.active { color: ${B.teal}; }
           .bottom-nav-icon { font-size: 22px; margin-bottom: 2px; }
           
-          /* Grids to Single Column */
           .grid-2 { grid-template-columns: 1fr; }
           .cal-layout { grid-template-columns: 1fr; gap: 16px; }
           .cal-sidebar { order: -1; }
@@ -706,13 +708,11 @@ export default function TVHindelangApp() {
           .admin-list-actions { display: flex; gap: 8px; margin-top: 4px; padding-top: 10px; border-top: 1px dashed ${B.lightGrey}; }
           .admin-tabs-container { overflow-x: auto; padding-bottom: 5px; }
           
-          /* Chat Mobile View */
           .chat-layout { grid-template-columns: 1fr; height: calc(100vh - 180px); border-radius: 8px; }
           .chat-sidebar.mobile-hidden { display: none !important; }
           .chat-main.mobile-hidden { display: none !important; }
           .mobile-back-btn { display: block; background: none; border: none; font-size: 22px; cursor: pointer; margin-right: 12px; color: ${B.anthracite}; }
           
-          /* Modals */
           .modal { padding: 20px; }
         }
       `}</style>
@@ -749,9 +749,10 @@ export default function TVHindelangApp() {
         </div>
       </header>
 
-      {/* ── FILTER BAR ── */}
+      {/* ── FILTER BAR (DYNAMIC) ── */}
       {(view==="calendar"||view==="schedule")&&(
-        <div style={{background:B.white,borderBottom:`1.5px solid ${B.lightGrey}`,padding:"8px 24px",display:"flex",gap:6,overflowX:"auto",flexShrink:0}}>
+        <div style={{background:B.white,borderBottom:`1.5px solid ${B.lightGrey}`,padding:"12px 24px",display:"flex",alignItems:"center",gap:10,overflowX:"auto",flexShrink:0}}>
+          <span style={{fontSize:12,fontWeight:800,color:B.midGrey,letterSpacing:1,textTransform:"uppercase",flexShrink:0}}>🔍 Filter:</span>
           {teamNames.map(t=>(
             <button key={t} className="pill" style={{background:filterTeam===t?B.teal:B.offWhite,color:filterTeam===t?B.white:B.midGrey}} onClick={()=>setFilterTeam(t)}>{t}</button>
           ))}
@@ -1042,7 +1043,6 @@ export default function TVHindelangApp() {
         {view==="messages"&&(
           <div style={{maxWidth:1100,margin:"0 auto"}}>
             <div className="chat-layout">
-              {/* Seitenleiste (Threads) - Versteckt am Handy, wenn ein Chat offen ist */}
               <div className={`chat-sidebar ${activeThread ? 'mobile-hidden' : ''}`} style={{borderRight:`1.5px solid ${B.lightGrey}`,background:B.offWhite}}>
                 <div style={{padding:"16px 14px",borderBottom:`1.5px solid ${B.lightGrey}`,background:B.white,flexShrink:0}}>
                   <div style={{fontSize:15,fontWeight:900,letterSpacing:1,textTransform:"uppercase"}}>Nachrichten</div>
@@ -1068,8 +1068,7 @@ export default function TVHindelangApp() {
                 </div>
               </div>
               
-              {/* Hauptbereich (Aktiver Chat) - Versteckt am Handy, wenn KEIN Chat offen ist */}
-              <div className={`chat-main ${!activeThread ? 'mobile-hidden' : ''}`} style={{background:B.white}}>
+              <div className={`chat-main ${!activeThread ? 'mobile-hidden' : ''}`} style={{background:B.white, display:"flex", flexDirection:"column"}}>
                 {activeThread ? (
                   <>
                     <div style={{padding:"14px 20px",borderBottom:`1.5px solid ${B.lightGrey}`,display:"flex",alignItems:"center",gap:12,background:B.white,flexShrink:0}}>
