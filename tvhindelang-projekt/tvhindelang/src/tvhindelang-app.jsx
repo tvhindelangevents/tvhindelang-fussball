@@ -28,7 +28,7 @@ const db      = getFirestore(firebaseApp);
 const auth    = getAuth(firebaseApp);
 const storage = getStorage(firebaseApp);
 
-// "Secondary App" Trick: Erlaubt das Erstellen von Usern, ohne den aktuellen Admin auszuloggen
+// "Secondary App" Trick: Erlaubt das Erstellen von Usern durch den Admin, ohne ihn auszuloggen
 const secondaryApp = getApps().find(a => a.name === "Secondary") || initializeApp(firebaseConfig, "Secondary");
 const secondaryAuth = getAuth(secondaryApp);
 
@@ -56,7 +56,6 @@ const typeOf = (v) => EVENT_TYPES.find(t=>t.value===v)||EVENT_TYPES[3];
 const INIT_TEAMS = []; 
 const INIT_INTRO = "Die Fußballabteilung des TV Hindelang e.V. vereint alle aktiven Mannschaften. Hier findet ihr Termine, Spielpläne und Vereinsnews an einem Ort.";
 
-// EVENT INIT (NEU: declines Array)
 const emptyEvent = (date="") => ({ type:"training", title:"", date, time:"17:00", endTime:"", location:"", notes:"", team:"Herren", bus1:false, bus2:false, declines: [] });
 const emptyTeamForm = () => ({ name: "", trainers: [{ name: "", phone: "" }], training: "", jahrgang: "" });
 
@@ -87,10 +86,14 @@ export default function TVHindelangApp() {
   const [user, setUser]           = useState(null);  
   const [userRole, setUserRole]   = useState(null);  
   const [authLoading, setAuthLoading] = useState(true);
-  const [loginEmail, setLoginEmail]   = useState("");
+  
+  // Login / Register Form State
+  const [isRegisterMode, setIsRegisterMode] = useState(false);
+  const [loginEmail, setLoginEmail]       = useState("");
   const [loginPassword, setLoginPassword] = useState("");
-  const [loginError, setLoginError]   = useState("");
-  const [loginLoading, setLoginLoading] = useState(false);
+  const [registerName, setRegisterName]   = useState("");
+  const [loginError, setLoginError]       = useState("");
+  const [loginLoading, setLoginLoading]   = useState(false);
 
   // ── Data from Firestore ──
   const [events, setEvents]   = useState([]);
@@ -205,7 +208,7 @@ export default function TVHindelangApp() {
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({behavior:"smooth"}); }, [activeThread]);
 
-  // ── Auth actions ─────────────────────────────────────────
+  // ── Auth actions (Login & Registrierung) ──────────────────
   const handleLogin = async () => {
     setLoginLoading(true); setLoginError("");
     try {
@@ -216,6 +219,35 @@ export default function TVHindelangApp() {
     }
     setLoginLoading(false);
   };
+
+  const handleRegister = async () => {
+    setLoginLoading(true); setLoginError("");
+    if (!registerName.trim()) {
+      setLoginError("Bitte gib deinen Namen an.");
+      setLoginLoading(false);
+      return;
+    }
+    try {
+      // Nutzt den normalen Auth (nicht secondary), da der Nutzer nach Registrierung sofort eingeloggt sein soll
+      const userCredential = await createUserWithEmailAndPassword(auth, loginEmail, loginPassword);
+      
+      // Benutzer in der Datenbank speichern
+      await setDoc(doc(db, "users", userCredential.user.uid), {
+        email: loginEmail,
+        name: registerName,
+        role: "player", // Standard-Rolle für Neuanmeldungen
+        createdAt: serverTimestamp()
+      });
+
+      setLoginEmail(""); setLoginPassword(""); setRegisterName("");
+    } catch (e) {
+      if (e.code === 'auth/email-already-in-use') setLoginError("Diese E-Mail ist bereits registriert.");
+      else if (e.code === 'auth/weak-password') setLoginError("Das Passwort muss mindestens 6 Zeichen lang sein.");
+      else setLoginError("Fehler: " + e.message);
+    }
+    setLoginLoading(false);
+  };
+
   const handleLogout = async () => { await signOut(auth); setView("home"); };
 
   // ── WHATSAPP SHARE LOGIK ──
@@ -235,11 +267,11 @@ export default function TVHindelangApp() {
   const toggleDecline = async (ev) => {
     if (!user) return;
     const myProfile = allUsers.find(u => u.id === user.uid);
-    const myName = myProfile?.name || user.email; // Finde Klarnamen
+    const myName = myProfile?.name || user.email; 
     
     let newDeclines = ev.declines || [];
     if (newDeclines.includes(myName)) {
-      newDeclines = newDeclines.filter(n => n !== myName); // Wieder zusagen
+      newDeclines = newDeclines.filter(n => n !== myName); // Zusagen
     } else {
       newDeclines.push(myName); // Absagen
     }
@@ -324,7 +356,7 @@ export default function TVHindelangApp() {
   };
   const deleteTeam = async (id) => { await deleteDoc(doc(db,"teams",id)); };
 
-  // ── User CRUD ────────────────────────────────────────────
+  // ── User CRUD (Admin Area) ───────────────────────────────
   const openAddUser = () => {
     setEditingUser(null);
     setUserError("");
@@ -355,6 +387,7 @@ export default function TVHindelangApp() {
           setUserSaving(false);
           return;
         }
+        // Vom Admin erstellter Account: Secondary Auth verhindert Ausloggen des Admins!
         const userCredential = await createUserWithEmailAndPassword(secondaryAuth, userForm.email, userForm.password);
         const newUid = userCredential.user.uid;
         
@@ -423,8 +456,6 @@ export default function TVHindelangApp() {
     const myProfile = allUsers.find(u => u.id === user?.uid);
     const myName = myProfile?.name || user?.email;
     const hasDeclined = (ev.declines || []).includes(myName);
-
-    // Prüfe, ob das Event in den letzten 48 Stunden erstellt wurde
     const isNew = ev.createdAt && ev.createdAt.toDate() > new Date(Date.now() - 48 * 60 * 60 * 1000);
 
     return (
@@ -443,7 +474,6 @@ export default function TVHindelangApp() {
             {ev.location&&<div style={{fontSize:12,color:B.midGrey,marginTop:1}}>📍 {ev.location}</div>}
             {ev.notes&&<div style={{fontSize:12,color:B.charcoal,marginTop:4,fontStyle:"italic",fontFamily:"'Barlow',sans-serif"}}>{ev.notes}</div>}
             
-            {/* ABSAGEN ANZEIGE FÜR TRAINER */}
             {canEditEvents && ev.declines && ev.declines.length > 0 && (
               <div style={{marginTop: 8, padding: "6px 8px", background: B.redLight, borderRadius: 6, fontSize: 12, color: B.red, fontFamily:"'Barlow',sans-serif"}}>
                 <strong>❌ {ev.declines.length} Absage(n):</strong> {ev.declines.join(", ")}
@@ -452,12 +482,10 @@ export default function TVHindelangApp() {
           </div>
           
           <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0, alignItems:"flex-end"}}>
-            {/* ABSAGE BUTTON FÜR ALLE SPIELER */}
             <button className="btn btn-ghost" style={{padding:"5px 10px", fontSize:11, color: hasDeclined ? B.charcoal : B.red, background: hasDeclined ? B.lightGrey : B.redLight}} onClick={(e)=>{e.stopPropagation(); toggleDecline(ev);}}>
               {hasDeclined ? "✅ Doch dabei" : "❌ Ich fehle"}
             </button>
 
-            {/* ADMIN/TRAINER CONTROLS */}
             {canEditEvents&&controls&&(
               <div style={{display:"flex", gap:4, marginTop: 4}}>
                 <button className="btn btn-edit" style={{background:"#25D366", color:"white"}} onClick={(e)=>{e.stopPropagation(); shareEventWhatsApp(ev);}} title="In WhatsApp teilen">📲 WA</button>
@@ -488,6 +516,7 @@ export default function TVHindelangApp() {
     </div>
   );
 
+  // ─── LOGIN & REGISTER SCREEN ────────────────────────────────────────────────
   if (!user) return (
     <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:B.offWhite,fontFamily:"'Barlow Condensed',sans-serif"}}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=Barlow:wght@400;500&display=swap');*{box-sizing:border-box;margin:0;padding:0;}.input{background:#fff;border:1.5px solid ${B.lightGrey};color:${B.anthracite};border-radius:8px;padding:9px 13px;font-family:'Barlow',sans-serif;font-size:14px;width:100%;outline:none;transition:border-color .2s;}.input:focus{border-color:${B.teal};}.btn{border:none;border-radius:7px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:1px;text-transform:uppercase;transition:all .18s;}.btn-primary{background:${B.teal};color:white;padding:10px 22px;font-size:14px;}.btn-primary:hover{background:${B.tealDark};}.btn-primary:disabled{background:${B.lightGrey};color:${B.midGrey};cursor:not-allowed;}`}</style>
@@ -495,13 +524,40 @@ export default function TVHindelangApp() {
         <div style={{display:"flex",flexDirection:"column",alignItems:"center",marginBottom:28}}>
           <PineLogo size={52}/>
           <div style={{fontSize:22,fontWeight:900,letterSpacing:2,textTransform:"uppercase",marginTop:12}}>TV Hindelang</div>
-          <div style={{fontSize:13,color:B.midGrey,fontWeight:700,letterSpacing:2,textTransform:"uppercase"}}>Fussball</div>
+          <div style={{fontSize:13,color:B.midGrey,fontWeight:700,letterSpacing:2,textTransform:"uppercase"}}>
+            {isRegisterMode ? "Registrierung" : "Fussball"}
+          </div>
         </div>
+        
         <div style={{display:"flex",flexDirection:"column",gap:12}}>
-          <div><label style={LBL}>E-Mail</label><input className="input" type="email" placeholder="deine@email.de" value={loginEmail} onChange={e=>setLoginEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleLogin()}/></div>
-          <div><label style={LBL}>Passwort</label><input className="input" type="password" placeholder="••••••••" value={loginPassword} onChange={e=>setLoginPassword(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleLogin()}/></div>
+          {isRegisterMode && (
+            <div>
+              <label style={LBL}>Dein Name (Vor- & Nachname)</label>
+              <input className="input" type="text" placeholder="Max Mustermann" value={registerName}
+                onChange={e=>setRegisterName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleRegister()}/>
+            </div>
+          )}
+          <div>
+            <label style={LBL}>E-Mail</label>
+            <input className="input" type="email" placeholder="deine@email.de" value={loginEmail}
+              onChange={e=>setLoginEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&(isRegisterMode?handleRegister():handleLogin())}/>
+          </div>
+          <div>
+            <label style={LBL}>Passwort</label>
+            <input className="input" type="password" placeholder={isRegisterMode ? "Mindestens 6 Zeichen" : "••••••••"} value={loginPassword}
+              onChange={e=>setLoginPassword(e.target.value)} onKeyDown={e=>e.key==="Enter"&&(isRegisterMode?handleRegister():handleLogin())}/>
+          </div>
+          
           {loginError&&<div style={{color:B.red,fontSize:13,fontFamily:"'Barlow',sans-serif"}}>❌ {loginError}</div>}
-          <button className="btn btn-primary" style={{marginTop:4}} onClick={handleLogin} disabled={loginLoading||!loginEmail||!loginPassword}>{loginLoading?"Wird eingeloggt…":"Einloggen"}</button>
+          
+          <button className="btn btn-primary" style={{marginTop:4}} onClick={isRegisterMode ? handleRegister : handleLogin} disabled={loginLoading||!loginEmail||!loginPassword||(isRegisterMode&&!registerName)}>
+            {loginLoading ? "Bitte warten..." : (isRegisterMode ? "Konto erstellen" : "Einloggen")}
+          </button>
+        </div>
+
+        <div style={{marginTop:24,fontSize:13,color:B.teal,fontWeight:700,fontFamily:"'Barlow',sans-serif",textAlign:"center",cursor:"pointer",textDecoration:"underline"}} 
+             onClick={() => { setIsRegisterMode(!isRegisterMode); setLoginError(""); }}>
+          {isRegisterMode ? "Bereits ein Konto? Hier einloggen" : "Noch kein Konto? Hier registrieren"}
         </div>
       </div>
     </div>
@@ -765,7 +821,7 @@ export default function TVHindelangApp() {
                           <div style={{color:B.midGrey,fontSize:12}}>⏰ {ev.time} {ev.endTime ? `- ${ev.endTime}` : ""} Uhr · 📍 {ev.location}</div>
                           {ev.notes&&<div style={{fontSize:12,color:B.charcoal,marginTop:2,fontStyle:"italic",fontFamily:"'Barlow',sans-serif"}}>{ev.notes}</div>}
                         </div>
-                        {canEditEvents&&<div style={{display:"flex",gap:6}}><button className="btn btn-edit" style={{background:"#25D366", color:"white"}} onClick={()=>shareEventWhatsApp(ev)}>📲 WA</button><button className="btn btn-edit" onClick={()=>openEditEvent(ev)}>✏️</button><button className="btn btn-danger" onClick={()=>deleteEvent(ev.id)}>🗑️</button></div>}
+                        {canEditEvents&&<div style={{display:"flex",gap:6}}><button className="btn btn-edit" style={{background:"#25D366", color:"white"}} onClick={()=>shareEventWhatsApp(ev)} title="In WhatsApp teilen">📲 WA</button><button className="btn btn-edit" onClick={()=>openEditEvent(ev)}>✏️</button><button className="btn btn-danger" onClick={()=>deleteEvent(ev.id)}>🗑️</button></div>}
                       </div>
                     );
                   })
@@ -1014,7 +1070,7 @@ export default function TVHindelangApp() {
                         </div>
                         <div style={{display:"flex",gap:6,flexShrink:0}}>
                           <button className="btn btn-edit" style={{background:"#25D366", color:"white"}} onClick={()=>shareNewsWhatsApp(n)} title="In WhatsApp teilen">📲 WA</button>
-                          <button className="btn btn-edit" onClick={()=>openEditNews(n)}>✏️</button>
+                          <button className="btn btn-edit" onClick={()=>openEditEvent(n)}>✏️</button>
                           <button className="btn btn-danger" onClick={()=>deleteNews(n.id)}>🗑️</button>
                         </div>
                       </div>
@@ -1024,6 +1080,7 @@ export default function TVHindelangApp() {
               </div>
             )}
 
+            {/* Benutzerverwaltung Content */}
             {adminSection==="users"&&isAdmin&&(
               <div>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
