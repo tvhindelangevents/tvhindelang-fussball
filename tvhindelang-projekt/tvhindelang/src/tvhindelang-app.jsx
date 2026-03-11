@@ -159,7 +159,7 @@ export default function TVHindelangApp() {
   const daysInMonth = new Date(year,month+1,0).getDate();
   const todayStr = new Date().toISOString().slice(0,10);
 
-  // DYNAMISCHE FILTER-LISTE: Sammelt Teams aus der Datenbank UND aus importierten Terminen
+  // DYNAMISCHE FILTER-LISTE
   const uniqueTeams = Array.from(new Set([
     ...teams.map(t => t.name),
     ...events.map(e => e.team).filter(Boolean)
@@ -223,6 +223,7 @@ export default function TVHindelangApp() {
 
   const handleLogout = async () => { await signOut(auth); setView("home"); };
 
+  // ── CSV IMPORT LOGIK ────────────────────────
   const handleCSVUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -500,8 +501,7 @@ export default function TVHindelangApp() {
     setShowNewThread(false); setNewThreadName("");
   };
 
-  // FILTER LOGIK
-  const matchesFilter = (ev) => filterTeam === "Alle Mannschaften" || ev.team === filterTeam;
+  const matchesFilter = (ev) => filterTeam==="Alle Mannschaften"||ev.team===filterTeam;
   const getDay = (day) => { const d=`${year}-${String(month+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`; return events.filter(e=>e.date===d&&matchesFilter(e)); };
   const selectedStr = selectedDay ? `${year}-${String(month+1).padStart(2,"0")}-${String(selectedDay).padStart(2,"0")}` : "";
   const selectedEvs = selectedDay ? events.filter(e=>e.date===selectedStr&&matchesFilter(e)).sort((a,b)=>(a.time||"").localeCompare(b.time||"")) : [];
@@ -582,6 +582,7 @@ export default function TVHindelangApp() {
     </div>
   );
 
+  // ─── LOGIN & REGISTER SCREEN ────────────────────────────────────────────────
   if (!user) return (
     <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:B.offWhite,fontFamily:"'Barlow Condensed',sans-serif", padding: 20}}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=Barlow:wght@400;500&display=swap');*{box-sizing:border-box;margin:0;padding:0;}.input{background:#fff;border:1.5px solid ${B.lightGrey};color:${B.anthracite};border-radius:8px;padding:9px 13px;font-family:'Barlow',sans-serif;font-size:14px;width:100%;outline:none;transition:border-color .2s;}.input:focus{border-color:${B.teal};}.btn{border:none;border-radius:7px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:1px;text-transform:uppercase;transition:all .18s;}.btn-primary{background:${B.teal};color:white;padding:10px 22px;font-size:14px;}.btn-primary:hover{background:${B.tealDark};}.btn-primary:disabled{background:${B.lightGrey};color:${B.midGrey};cursor:not-allowed;}`}</style>
@@ -634,10 +635,13 @@ export default function TVHindelangApp() {
         @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800;900&family=Barlow:wght@400;500;600&display=swap');
         *{box-sizing:border-box;margin:0;padding:0;}
         html, body { height: 100%; width: 100%; margin: 0; padding: 0; overflow: hidden; }
-        ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:#c0ced0;border-radius:4px}
         
         .app-container { display: flex; flex-direction: column; height: 100vh; }
         .main-wrapper { flex: 1; overflow-y: auto; padding: 28px 24px; }
+        
+        /* Unsichtbare, aber nutzbare Scrollbars für sauberes Wischen */
+        .hide-scroll { overflow-x: auto; -ms-overflow-style: none; scrollbar-width: none; }
+        .hide-scroll::-webkit-scrollbar { display: none; }
         
         .nav-btn { background:none;border:none;cursor:pointer;padding:13px 15px;color:${B.midGrey};font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;border-bottom:3px solid transparent;transition:all .2s;display:flex;align-items:center;gap:6px;white-space:nowrap; }
         .nav-btn:hover { color:${B.teal}; } .nav-btn.active { color:${B.teal};border-bottom-color:${B.teal}; }
@@ -678,7 +682,7 @@ export default function TVHindelangApp() {
         .cal-layout { display: grid; grid-template-columns: 1fr 320px; gap: 24px; max-width: 1200px; margin: 0 auto; }
         .schedule-grid { display: grid; grid-template-columns: 64px 3px 1fr auto; gap: 14px; align-items: center; padding: 14px 18px; transition: border-color .2s; }
         .admin-list-item { display: grid; grid-template-columns: 160px 1fr 1fr 1fr auto; gap: 16px; align-items: center; padding: 14px 18px; }
-        .chat-layout { display: grid; grid-template-columns: 270px 1fr; background: ${B.white}; border-radius: 12px; border: 1.5px solid ${B.lightGrey}; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,.07); height: calc(100vh - 160px); min-height: 500px; }
+        .chat-layout { display: grid; grid-template-columns: 270px 1fr; background: ${B.white}; border-radius: 12px; border: 1.5px solid ${B.lightGrey}; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,.07); height: calc(100vh - 200px); min-height: 500px; }
         
         .bottom-nav { display: none; }
         .mobile-back-btn { display: none; }
@@ -749,13 +753,28 @@ export default function TVHindelangApp() {
         </div>
       </header>
 
-      {/* ── FILTER BAR (DYNAMIC) ── */}
+      {/* ── FILTER & LEGENDE BAR (DYNAMIC) ── */}
       {(view==="calendar"||view==="schedule")&&(
-        <div style={{background:B.white,borderBottom:`1.5px solid ${B.lightGrey}`,padding:"12px 24px",display:"flex",alignItems:"center",gap:10,overflowX:"auto",flexShrink:0}}>
-          <span style={{fontSize:12,fontWeight:800,color:B.midGrey,letterSpacing:1,textTransform:"uppercase",flexShrink:0}}>🔍 Filter:</span>
-          {teamNames.map(t=>(
-            <button key={t} className="pill" style={{background:filterTeam===t?B.teal:B.offWhite,color:filterTeam===t?B.white:B.midGrey}} onClick={()=>setFilterTeam(t)}>{t}</button>
-          ))}
+        <div style={{background:B.white,borderBottom:`1.5px solid ${B.lightGrey}`,flexShrink:0}}>
+          {/* Filter Row */}
+          <div className="hide-scroll" style={{padding:"12px 24px",display:"flex",alignItems:"center",gap:10, borderBottom:`1px dashed ${B.lightGrey}`}}>
+            <span style={{fontSize:12,fontWeight:800,color:B.midGrey,letterSpacing:1,textTransform:"uppercase",flexShrink:0}}>🔍 Filter:</span>
+            {teamNames.map(t=>(
+              <button key={t} className="pill" style={{background:filterTeam===t?B.teal:B.offWhite,color:filterTeam===t?B.white:B.midGrey}} onClick={()=>setFilterTeam(t)}>{t}</button>
+            ))}
+          </div>
+          {/* Legend Row */}
+          <div className="hide-scroll" style={{padding:"10px 24px",display:"flex",alignItems:"center",gap:16}}>
+            <span style={{fontSize:11,fontWeight:800,color:B.midGrey,letterSpacing:1,textTransform:"uppercase",flexShrink:0}}>🎨 Legende:</span>
+            {EVENT_TYPES.map(t=>(
+              <div key={t.value} style={{display:"flex",alignItems:"center",gap:5,fontSize:12,fontWeight:600,color:B.charcoal,flexShrink:0}}>
+                <div style={{width:12,height:12,borderRadius:3,background:t.color}}/>{t.label}
+              </div>
+            ))}
+            <div style={{display:"flex",alignItems:"center",gap:5,fontSize:12,fontWeight:600,color:B.charcoal,flexShrink:0}}>
+              <div style={{width:12,height:12,borderRadius:3,background:BUS.color}}/>🚌 Bus
+            </div>
+          </div>
         </div>
       )}
 
@@ -883,10 +902,6 @@ export default function TVHindelangApp() {
                     </div>
                   );
                 })}
-              </div>
-              <div style={{display:"flex",gap:14,marginTop:14,flexWrap:"wrap"}}>
-                {EVENT_TYPES.map(t=><div key={t.value} style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:B.midGrey}}><div style={{width:10,height:10,borderRadius:2,background:t.color}}/>{t.label}</div>)}
-                <div style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:B.midGrey}}><div style={{width:10,height:10,borderRadius:2,background:BUS.color}}/>Bus reserviert</div>
               </div>
             </div>
             <div className="card cal-sidebar" style={{padding:20,alignSelf:"start"}}>
@@ -1292,24 +1307,15 @@ export default function TVHindelangApp() {
         )}
       </main>
 
-      {/* ── MOBILE BOTTOM NAV ── */}
-      <nav className="bottom-nav">
-        {NAV.map(({id,icon,label})=>(
-          <button key={id} className={`bottom-nav-item ${view===id?"active":""}`} onClick={()=>{setView(id);setSelectedTeam(null); setActiveThread(null);}}>
-            <div className="bottom-nav-icon">{icon}</div>
-            {label}
-          </button>
-        ))}
-        {canAccessAdmin&&(
-          <button className={`bottom-nav-item ${view==="admin"?"active":""}`} onClick={()=>{
-            setView("admin");
-            if(isTrainer && !isAdmin && adminSection !== "events" && adminSection !== "news") setAdminSection("events");
-          }}>
-            <div className="bottom-nav-icon">⚙️</div>
-            Admin
-          </button>
-        )}
-      </nav>
+      {/* ── FOOTER ── */}
+      <footer style={{background:B.white,borderTop:`1.5px solid ${B.lightGrey}`,padding:"10px 24px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+        <div style={{fontSize:11,color:B.midGrey,fontWeight:600}}>© TV Hindelang Fussball</div>
+        <div style={{display:"flex",gap:20}}>
+          {[["Impressum","https://share.google/fPlP9Wjcsvyabws2C"],["Datenschutz","https://share.google/887uLP0KRXJTx68Ws"]].map(([label,url])=>(
+            <a key={label} href={url} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:B.midGrey,fontWeight:700,letterSpacing:1,textTransform:"uppercase",textDecoration:"none"}}>{label}</a>
+          ))}
+        </div>
+      </footer>
 
       {/* ════ EVENT MODAL ════ */}
       {showEventModal&&(
