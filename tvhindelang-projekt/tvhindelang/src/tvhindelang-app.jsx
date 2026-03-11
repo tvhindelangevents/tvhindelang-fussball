@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { initializeApp, getApps, getApp } from "firebase/app";
 import {
-  getFirestore, collection, doc, getDocs, addDoc, updateDoc, deleteDoc,
+  getFirestore, collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc,
   onSnapshot, setDoc, serverTimestamp, query, orderBy
 } from "firebase/firestore";
 import {
@@ -154,7 +154,9 @@ export default function TVHindelangApp() {
           const snap = await getDoc(doc(db, "users", firebaseUser.uid));
           if (snap.exists()) setUserRole(snap.data().role || "player");
           else setUserRole("player");
-        } catch { setUserRole("player"); }
+        } catch { 
+          setUserRole("player"); 
+        }
       } else {
         setUser(null);
         setUserRole(null);
@@ -173,7 +175,6 @@ export default function TVHindelangApp() {
       setEvents(snap.docs.map(d=>({id:d.id,...d.data()})));
     }));
     
-    // HIER WURDE DER FEHLER BEHOBEN: Kein if (!snap.empty) mehr!
     unsubs.push(onSnapshot(collection(db,"teams"), snap => {
       setTeams(snap.docs.map(d=>({id:d.id,...d.data()})));
     }));
@@ -915,6 +916,7 @@ export default function TVHindelangApp() {
               </div>
             )}
 
+            {/* Benutzerverwaltung Content */}
             {adminSection==="users"&&isAdmin&&(
               <div>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
