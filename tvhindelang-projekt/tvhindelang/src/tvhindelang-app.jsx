@@ -54,7 +54,11 @@ const typeOf = (v) => EVENT_TYPES.find(t=>t.value===v)||EVENT_TYPES[3];
 const INIT_TEAMS = []; 
 const INIT_INTRO = "Die Fußballabteilung des TV Hindelang e.V. vereint alle aktiven Mannschaften. Hier findet ihr Termine, Spielpläne und Vereinsnews an einem Ort.";
 
-const emptyEvent = (date="") => ({ type:"training", title:"", date, time:"17:00", endTime:"", location:"", notes:"", team:"Herren", bus1:false, bus2:false, declines: [] });
+// EVENT INIT (Erweitert um Wiederholungs-Logik)
+const emptyEvent = (date="") => ({ 
+  type:"training", title:"", date, time:"17:00", endTime:"", location:"", notes:"", team:"Herren", bus1:false, bus2:false, declines: [],
+  isRecurring: false, recurringEndDate: "" 
+});
 const emptyTeamForm = () => ({ name: "", trainers: [{ name: "", phone: "" }], training: "", jahrgang: "" });
 
 const LBL = { fontSize:11, fontWeight:700, letterSpacing:1, color:B.midGrey, textTransform:"uppercase", display:"block", marginBottom:5 };
@@ -217,7 +221,7 @@ export default function TVHindelangApp() {
 
   const handleLogout = async () => { await signOut(auth); setView("home"); };
 
-  // ── CSV IMPORT LOGIK (NEU & KUGELSICHER FÜR BFV-DATEN) ────────────────────────
+  // ── CSV IMPORT LOGIK ────────────────────────
   const handleCSVUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -234,14 +238,12 @@ export default function TVHindelangApp() {
         return;
       }
 
-      // ERKENNUNG DES TRENNZEICHENS (TAB, SEMIKOLON, KOMMA)
       const headerLine = lines[0];
       let delimiter = ";";
-      if (headerLine.includes("\t")) delimiter = "\t"; // BFV nutzt oft Tabulatoren!
+      if (headerLine.includes("\t")) delimiter = "\t"; 
       else if (headerLine.split(";").length > headerLine.split(",").length) delimiter = ";";
       else delimiter = ",";
 
-      // ROBUSTER CSV-PARSER (Schützt Spalten vor falschem Splitten)
       const parseRow = (rowStr) => {
         const result = [];
         let current = '';
@@ -254,7 +256,7 @@ export default function TVHindelangApp() {
           else { current += char; }
         }
         result.push(current.trim());
-        return result.map(v => v.replace(/^"|"$/g, '').trim()); // Quotes am Rand entfernen
+        return result.map(v => v.replace(/^"|"$/g, '').trim()); 
       };
 
       const headers = parseRow(lines[0]).map(h => h.toLowerCase());
@@ -265,7 +267,6 @@ export default function TVHindelangApp() {
         const row = {};
         headers.forEach((header, index) => { row[header] = values[index] || ""; });
 
-        // PRÄZISE BFV-SPALTEN ZUWEISUNG
         const getVal = (exactMatches) => {
           let key = headers.find(h => exactMatches.includes(h));
           return key ? row[key] : "";
@@ -281,9 +282,8 @@ export default function TVHindelangApp() {
         let staffel = getVal(["staffel", "liga"]);
         let typ = getVal(["spielkennung", "spielart", "typ", "spieltyp", "wettbewerb"]);
 
-        if (!rawDate || !heim || !gast) continue; // Wenn Pflichtfelder fehlen -> überspringen
+        if (!rawDate || !heim || !gast) continue; 
 
-        // DATUM BEREINIGEN ("Sa. 14.03.2026" -> "2026-03-14")
         let cleanDate = rawDate.replace(/^[a-zA-ZäöüßÄÖÜ]{2}\.?\s*/, ''); 
         let formattedDate = "";
         const deMatch = cleanDate.match(/(\d{1,2})\.(\d{1,2})\.?(\d{2,4})?/); 
@@ -296,12 +296,9 @@ export default function TVHindelangApp() {
            let m = deMatch[2].padStart(2, '0');
            let y = deMatch[3] ? (deMatch[3].length === 2 ? '20' + deMatch[3] : deMatch[3]) : new Date().getFullYear().toString();
            formattedDate = `${y}-${m}-${d}`;
-        } else {
-           continue; // Z.B. wenn "Spielfrei" im Datum-Feld steht
-        }
+        } else { continue; }
         if (isNaN(new Date(formattedDate).getTime())) continue;
 
-        // UHRZEIT BEREINIGEN
         let formattedTime = "12:00"; 
         if (rawTime) {
             let tClean = rawTime.replace(".", ":").trim();
@@ -309,11 +306,9 @@ export default function TVHindelangApp() {
             if (tMatch) formattedTime = `${tMatch[1].padStart(2, '0')}:${tMatch[2]}`;
         }
 
-        // ORT KOMBINIEREN
         let fullLocation = [spielstaette, ort].filter(Boolean).join(", ");
         if (!fullLocation) fullLocation = "Ort unbekannt";
 
-        // TITEL & TEAM ERMITTELN
         let title = `${heim} vs. ${gast}`;
         let teamName = mannschaftsart || "Verein"; 
         
@@ -323,7 +318,6 @@ export default function TVHindelangApp() {
           title = `Auswärts bei ${heim}`;
         }
 
-        // ZUSATZINFOS BÜNDELN
         let extraInfos = [];
         if(typ) extraInfos.push(typ);
         if(staffel) extraInfos.push(`Staffel: ${staffel}`);
@@ -377,14 +371,52 @@ export default function TVHindelangApp() {
     await updateDoc(doc(db, "events", ev.id), { declines: newDeclines });
   };
 
+  // ── Event CRUD & RECURRING LOGIK ───────────────────────────────────────────
   const openAddEvent = (date="") => { setEditingEvent(null); setEventForm(emptyEvent(date)); setShowEventModal(true); };
-  const openEditEvent = (ev) => { setEditingEvent(ev); setEventForm({type:ev.type,title:ev.title,date:ev.date,time:ev.time,endTime:ev.endTime||"",location:ev.location||"",notes:ev.notes||"",team:ev.team||"Herren",bus1:ev.bus1||false,bus2:ev.bus2||false,declines:ev.declines||[]}); setShowEventModal(true); };
+  const openEditEvent = (ev) => { 
+    setEditingEvent(ev); 
+    setEventForm({type:ev.type,title:ev.title,date:ev.date,time:ev.time,endTime:ev.endTime||"",location:ev.location||"",notes:ev.notes||"",team:ev.team||"Herren",bus1:ev.bus1||false,bus2:ev.bus2||false,declines:ev.declines||[], isRecurring: false, recurringEndDate: ""}); 
+    setShowEventModal(true); 
+  };
+  
   const saveEvent = async () => {
-    if (!eventForm.title||!eventForm.date) return;
-    if (editingEvent) await updateDoc(doc(db,"events",editingEvent.id), eventForm);
-    else await addDoc(collection(db,"events"), {...eventForm, createdAt: serverTimestamp()});
+    if (!eventForm.title || !eventForm.date) return;
+
+    if (editingEvent) {
+      // Bearbeiten eines einzelnen Events
+      const updatedData = { ...eventForm };
+      delete updatedData.isRecurring;
+      delete updatedData.recurringEndDate;
+      await updateDoc(doc(db, "events", editingEvent.id), updatedData);
+    } else {
+      // Neues Event speichern (evtl. mit Wiederholung)
+      if (eventForm.isRecurring && eventForm.recurringEndDate) {
+        let currentDateObj = new Date(eventForm.date);
+        const endDateObj = new Date(eventForm.recurringEndDate);
+        
+        let loopCount = 0; // Sicherheitsschalter
+        while (currentDateObj <= endDateObj && loopCount < 52) { // Max 1 Jahr im Voraus
+          const isoDate = currentDateObj.toISOString().slice(0, 10);
+          const newEvent = { ...eventForm, date: isoDate, createdAt: serverTimestamp() };
+          delete newEvent.isRecurring;
+          delete newEvent.recurringEndDate;
+          
+          await addDoc(collection(db, "events"), newEvent);
+          
+          currentDateObj.setDate(currentDateObj.getDate() + 7); // + 1 Woche
+          loopCount++;
+        }
+      } else {
+        // Normales, einzelnes Event
+        const newEvent = { ...eventForm, createdAt: serverTimestamp() };
+        delete newEvent.isRecurring;
+        delete newEvent.recurringEndDate;
+        await addDoc(collection(db, "events"), newEvent);
+      }
+    }
     setShowEventModal(false);
   };
+  
   const deleteEvent = async (id) => { 
     if (window.confirm("Möchtest du diesen Termin wirklich löschen?")) { await deleteDoc(doc(db,"events",id)); }
   };
@@ -441,7 +473,8 @@ export default function TVHindelangApp() {
       else {
         if (!userForm.email || !userForm.password) { setUserError("E-Mail und Passwort sind Pflichtfelder für neue Nutzer."); setUserSaving(false); return; }
         const userCredential = await createUserWithEmailAndPassword(secondaryAuth, userForm.email, userForm.password);
-        await setDoc(doc(db, "users", userCredential.user.uid), { email: userForm.email, name: userForm.name, role: userForm.role, createdAt: serverTimestamp() });
+        const newUid = userCredential.user.uid;
+        await setDoc(doc(db, "users", newUid), { email: userForm.email, name: userForm.name, role: userForm.role, createdAt: serverTimestamp() });
         await signOut(secondaryAuth);
       }
       setShowUserModal(false);
@@ -1071,7 +1104,6 @@ export default function TVHindelangApp() {
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
                   <div style={{fontSize:16,fontWeight:800,letterSpacing:1,textTransform:"uppercase"}}>Termine ({events.length})</div>
                   
-                  {/* CSV IMPORT BUTTON */}
                   <div style={{display:"flex", gap: 10}}>
                     <input type="file" accept=".csv" style={{display: "none"}} ref={csvInputRef} onChange={handleCSVUpload} />
                     <button className="btn btn-ghost" onClick={() => csvInputRef.current?.click()} disabled={isImporting}>
@@ -1234,6 +1266,7 @@ export default function TVHindelangApp() {
               <div><label style={LBL}>Titel *</label>
                 <input className="input" placeholder="z.B. Heimspiel vs. SV Musterstadt" value={eventForm.title} onChange={e=>setEventForm({...eventForm,title:e.target.value})}/>
               </div>
+              
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}}>
                 <div><label style={LBL}>Datum *</label>
                   <input className="input" type="date" value={eventForm.date} onChange={e=>setEventForm({...eventForm,date:e.target.value})}/>
@@ -1245,6 +1278,23 @@ export default function TVHindelangApp() {
                   <input className="input" type="time" value={eventForm.endTime} onChange={e=>setEventForm({...eventForm,endTime:e.target.value})}/>
                 </div>
               </div>
+
+              {/* WIEDERHOLUNGS-LOGIK (Nur bei neuen Terminen sichtbar) */}
+              {!editingEvent && (
+                <div style={{marginTop: -4, background: eventForm.isRecurring ? B.tealLight : "transparent", padding: eventForm.isRecurring ? "10px 14px" : "0 4px", borderRadius: 8, transition: "all .2s"}}>
+                  <label style={{display:"flex", alignItems:"center", gap:8, fontSize:14, fontWeight:700, cursor:"pointer", color: eventForm.isRecurring ? B.tealDark : B.charcoal}}>
+                    <input type="checkbox" style={{width: 16, height: 16}} checked={eventForm.isRecurring} onChange={e=>setEventForm({...eventForm, isRecurring: e.target.checked})} />
+                    🔄 Wöchentlich wiederholen
+                  </label>
+                  {eventForm.isRecurring && (
+                     <div style={{marginTop: 10}}>
+                        <label style={LBL}>Letzter Termin am *</label>
+                        <input className="input" type="date" value={eventForm.recurringEndDate} onChange={e=>setEventForm({...eventForm, recurringEndDate: e.target.value})} />
+                     </div>
+                  )}
+                </div>
+              )}
+
               <div><label style={LBL}>Ort</label>
                 <input className="input" placeholder="z.B. Sportplatz Hauptfeld" value={eventForm.location} onChange={e=>setEventForm({...eventForm,location:e.target.value})}/>
               </div>
@@ -1266,7 +1316,9 @@ export default function TVHindelangApp() {
               </div>
               <div style={{display:"flex",gap:10,marginTop:4}}>
                 <button className="btn btn-ghost" style={{flex:1}} onClick={()=>setShowEventModal(false)}>Abbrechen</button>
-                <button className="btn btn-primary" style={{flex:2}} onClick={saveEvent} disabled={!eventForm.title||!eventForm.date}>{editingEvent?"✓ Speichern":"+ Erstellen"}</button>
+                <button className="btn btn-primary" style={{flex:2}} onClick={saveEvent} disabled={!eventForm.title || !eventForm.date || (eventForm.isRecurring && !eventForm.recurringEndDate)}>
+                  {editingEvent ? "✓ Speichern" : (eventForm.isRecurring ? "🔄 Serie erstellen" : "+ Erstellen")}
+                </button>
               </div>
             </div>
           </div>
