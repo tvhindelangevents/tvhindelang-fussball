@@ -54,11 +54,7 @@ const typeOf = (v) => EVENT_TYPES.find(t=>t.value===v)||EVENT_TYPES[3];
 const INIT_TEAMS = []; 
 const INIT_INTRO = "Die Fußballabteilung des TV Hindelang e.V. vereint alle aktiven Mannschaften. Hier findet ihr Termine, Spielpläne und Vereinsnews an einem Ort.";
 
-// EVENT INIT (Erweitert um Wiederholungs-Logik)
-const emptyEvent = (date="") => ({ 
-  type:"training", title:"", date, time:"17:00", endTime:"", location:"", notes:"", team:"Herren", bus1:false, bus2:false, declines: [],
-  isRecurring: false, recurringEndDate: "" 
-});
+const emptyEvent = (date="") => ({ type:"training", title:"", date, time:"17:00", endTime:"", location:"", notes:"", team:"Herren", bus1:false, bus2:false, declines: [] });
 const emptyTeamForm = () => ({ name: "", trainers: [{ name: "", phone: "" }], training: "", jahrgang: "" });
 
 const LBL = { fontSize:11, fontWeight:700, letterSpacing:1, color:B.midGrey, textTransform:"uppercase", display:"block", marginBottom:5 };
@@ -383,34 +379,26 @@ export default function TVHindelangApp() {
     if (!eventForm.title || !eventForm.date) return;
 
     if (editingEvent) {
-      // Bearbeiten eines einzelnen Events
       const updatedData = { ...eventForm };
       delete updatedData.isRecurring;
       delete updatedData.recurringEndDate;
       await updateDoc(doc(db, "events", editingEvent.id), updatedData);
     } else {
-      // Neues Event speichern (evtl. mit Wiederholung)
       if (eventForm.isRecurring && eventForm.recurringEndDate) {
         let currentDateObj = new Date(eventForm.date);
         const endDateObj = new Date(eventForm.recurringEndDate);
-        
-        let loopCount = 0; // Sicherheitsschalter
-        while (currentDateObj <= endDateObj && loopCount < 52) { // Max 1 Jahr im Voraus
+        let loopCount = 0; 
+        while (currentDateObj <= endDateObj && loopCount < 52) { 
           const isoDate = currentDateObj.toISOString().slice(0, 10);
           const newEvent = { ...eventForm, date: isoDate, createdAt: serverTimestamp() };
-          delete newEvent.isRecurring;
-          delete newEvent.recurringEndDate;
-          
+          delete newEvent.isRecurring; delete newEvent.recurringEndDate;
           await addDoc(collection(db, "events"), newEvent);
-          
-          currentDateObj.setDate(currentDateObj.getDate() + 7); // + 1 Woche
+          currentDateObj.setDate(currentDateObj.getDate() + 7); 
           loopCount++;
         }
       } else {
-        // Normales, einzelnes Event
         const newEvent = { ...eventForm, createdAt: serverTimestamp() };
-        delete newEvent.isRecurring;
-        delete newEvent.recurringEndDate;
+        delete newEvent.isRecurring; delete newEvent.recurringEndDate;
         await addDoc(collection(db, "events"), newEvent);
       }
     }
@@ -519,8 +507,8 @@ export default function TVHindelangApp() {
     { id:"home",     icon:"🏠", label:"Start"        },
     { id:"calendar", icon:"📅", label:"Kalender"     },
     { id:"schedule", icon:"📋", label:"Spielplan"    },
-    { id:"teams",    icon:"👥", label:"Mannschaften" },
-    { id:"messages", icon:"💬", label:"Nachrichten"  },
+    { id:"teams",    icon:"👥", label:"Teams"        },
+    { id:"messages", icon:"💬", label:"Chats"        },
   ];
 
   const EventCard = ({ ev, controls=true }) => {
@@ -533,7 +521,7 @@ export default function TVHindelangApp() {
 
     return (
       <div style={{borderLeft:`3px solid ${hasBus?BUS.color:t.color}`,background:hasBus?BUS.bg:t.bg,borderRadius:"0 8px 8px 0",padding:"11px 13px",marginBottom:10}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}} className="event-card-inner">
           <div style={{flex:1,minWidth:0}}>
             <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:5}}>
               {isNew && <Chip bg={B.amberLight} c={B.amber}>NEU</Chip>}
@@ -554,13 +542,13 @@ export default function TVHindelangApp() {
             )}
           </div>
           
-          <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0, alignItems:"flex-end"}}>
+          <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0, alignItems:"flex-end"}} className="event-card-actions">
             <button className="btn btn-ghost" style={{padding:"5px 10px", fontSize:11, color: hasDeclined ? B.charcoal : B.red, background: hasDeclined ? B.lightGrey : B.redLight}} onClick={(e)=>{e.stopPropagation(); toggleDecline(ev);}}>
               {hasDeclined ? "✅ Doch dabei" : "❌ Ich fehle"}
             </button>
 
             {canEditEvents&&controls&&(
-              <div style={{display:"flex", gap:4, marginTop: 4}}>
+              <div style={{display:"flex", gap:4, marginTop: 4}} className="event-card-admin-actions">
                 <button className="btn btn-edit" style={{background:"#25D366", color:"white"}} onClick={(e)=>{e.stopPropagation(); shareEventWhatsApp(ev);}} title="In WhatsApp teilen">📲 WA</button>
                 <button className="btn btn-edit" onClick={(e)=>{e.stopPropagation(); openEditEvent(ev);}}>✏️</button>
                 <button className="btn btn-danger" onClick={(e)=>{e.stopPropagation(); deleteEvent(ev.id);}}>🗑️</button>
@@ -578,7 +566,7 @@ export default function TVHindelangApp() {
     if (canEditEvents) tabs.push({ id: "events", label: "📅 Termine" });
     if (canEditNews) tabs.push({ id: "news", label: "📢 News" });
     if (isAdmin) tabs.push({ id: "users", label: "👤 Benutzer" });
-    if (isAdmin) tabs.push({ id: "intro", label: "🏠 Starttext" });
+    if (isAdmin) tabs.push({ id: "intro", label: "🏠 Startseite" });
     return tabs;
   };
 
@@ -591,7 +579,7 @@ export default function TVHindelangApp() {
 
   // ─── LOGIN & REGISTER SCREEN ────────────────────────────────────────────────
   if (!user) return (
-    <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:B.offWhite,fontFamily:"'Barlow Condensed',sans-serif"}}>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:B.offWhite,fontFamily:"'Barlow Condensed',sans-serif", padding: 20}}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=Barlow:wght@400;500&display=swap');*{box-sizing:border-box;margin:0;padding:0;}.input{background:#fff;border:1.5px solid ${B.lightGrey};color:${B.anthracite};border-radius:8px;padding:9px 13px;font-family:'Barlow',sans-serif;font-size:14px;width:100%;outline:none;transition:border-color .2s;}.input:focus{border-color:${B.teal};}.btn{border:none;border-radius:7px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:1px;text-transform:uppercase;transition:all .18s;}.btn-primary{background:${B.teal};color:white;padding:10px 22px;font-size:14px;}.btn-primary:hover{background:${B.tealDark};}.btn-primary:disabled{background:${B.lightGrey};color:${B.midGrey};cursor:not-allowed;}`}</style>
       <div style={{background:B.white,border:`1.5px solid ${B.lightGrey}`,borderRadius:16,padding:"40px 36px",width:"100%",maxWidth:400,boxShadow:"0 20px 60px rgba(0,0,0,.1)"}}>
         <div style={{display:"flex",flexDirection:"column",alignItems:"center",marginBottom:28}}>
@@ -637,38 +625,96 @@ export default function TVHindelangApp() {
   );
 
   return (
-    <div style={{fontFamily:"'Barlow Condensed','Arial Narrow',sans-serif",background:B.offWhite,minHeight:"100vh",color:B.anthracite,display:"flex",flexDirection:"column"}}>
+    <div className="app-container" style={{fontFamily:"'Barlow Condensed','Arial Narrow',sans-serif",background:B.offWhite,color:B.anthracite}}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800;900&family=Barlow:wght@400;500;600&display=swap');
         *{box-sizing:border-box;margin:0;padding:0;}
+        html, body { height: 100%; width: 100%; margin: 0; padding: 0; overflow: hidden; }
         ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:#c0ced0;border-radius:4px}
-        .nav-btn{background:none;border:none;cursor:pointer;padding:13px 15px;color:${B.midGrey};font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;border-bottom:3px solid transparent;transition:all .2s;display:flex;align-items:center;gap:6px;white-space:nowrap;}
-        .nav-btn:hover{color:${B.teal};} .nav-btn.active{color:${B.teal};border-bottom-color:${B.teal};}
-        .btn{border:none;border-radius:7px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:1px;text-transform:uppercase;transition:all .18s;}
-        .btn-primary{background:${B.teal};color:white;padding:10px 22px;font-size:14px;} .btn-primary:hover{background:${B.tealDark};}
-        .btn-primary:disabled{background:${B.lightGrey};color:${B.midGrey};cursor:not-allowed;}
-        .btn-ghost{background:${B.lightGrey};color:${B.charcoal};padding:8px 16px;font-size:13px;} .btn-ghost:hover{background:#d0dadc;}
-        .btn-edit{background:${B.tealLight};color:${B.teal};padding:6px 10px;font-size:12px;} .btn-edit:hover{background:${B.teal};color:white;}
-        .btn-danger{background:${B.redLight};color:${B.red};padding:6px 10px;font-size:12px;} .btn-danger:hover{background:${B.red};color:white;}
-        .card{background:${B.white};border:1.5px solid ${B.lightGrey};border-radius:10px;}
-        .input{background:${B.white};border:1.5px solid ${B.lightGrey};color:${B.anthracite};border-radius:8px;padding:9px 13px;font-family:'Barlow',sans-serif;font-size:14px;width:100%;outline:none;transition:border-color .2s;} .input:focus{border-color:${B.teal};}
-        .modal-bg{position:fixed;inset:0;background:rgba(28,28,28,.5);display:flex;align-items:center;justify-content:center;z-index:200;padding:20px;backdrop-filter:blur(4px);}
-        .modal{background:${B.white};border-radius:14px;padding:30px;width:100%;max-width:520px;box-shadow:0 24px 64px rgba(0,0,0,.15);max-height:90vh;overflow-y:auto;}
-        .cal-day{min-height:64px;background:${B.white};border:1.5px solid ${B.lightGrey};border-radius:8px;padding:6px;cursor:pointer;transition:all .15s;}
-        .cal-day:hover{border-color:${B.tealMid};background:#f0fbfc;} .cal-day.today{border-color:${B.teal};background:${B.tealLight};}
-        .cal-day.selected{border-color:${B.teal};background:#dff2f5;box-shadow:0 0 0 2px ${B.tealMid};} .cal-day.other-month{opacity:.2;pointer-events:none;}
-        .event-bar{height:4px;border-radius:3px;margin:1px 0;}
-        .tile{background:${B.white};border:1.5px solid ${B.lightGrey};border-radius:14px;padding:22px;cursor:pointer;transition:all .2s;display:flex;flex-direction:column;gap:12px;}
-        .tile:hover{border-color:${B.teal};transform:translateY(-2px);box-shadow:0 8px 24px rgba(41,184,200,.1);}
-        .team-card{background:${B.white};border:1.5px solid ${B.lightGrey};border-radius:10px;padding:18px 20px;cursor:pointer;transition:all .2s;}
-        .team-card:hover{border-color:${B.teal};transform:translateY(-2px);box-shadow:0 6px 20px rgba(41,184,200,.1);}
-        .chat-me{background:${B.teal};color:white;border-radius:14px 14px 2px 14px;padding:9px 14px;max-width:78%;align-self:flex-end;font-size:14px;font-family:'Barlow',sans-serif;}
-        .chat-them{background:${B.white};border:1.5px solid ${B.lightGrey};border-radius:14px 14px 14px 2px;padding:9px 14px;max-width:78%;align-self:flex-start;font-size:14px;font-family:'Barlow',sans-serif;}
-        .pill{border:none;border-radius:20px;padding:5px 13px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;letter-spacing:.8px;text-transform:uppercase;white-space:nowrap;transition:all .15s;}
-        .admin-tab{background:none;border:none;border-bottom:2px solid transparent;padding:10px 18px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:1px;text-transform:uppercase;color:${B.midGrey};transition:all .2s;}
-        .admin-tab:hover{color:${B.amber};} .admin-tab.active{color:${B.amber};border-bottom-color:${B.amber};}
-        select.input option{background:white;} textarea.input{resize:vertical;min-height:80px;}
-        input[type="file"].input { padding: 6px 10px; font-size: 13px; }
+        
+        .app-container { display: flex; flex-direction: column; height: 100vh; }
+        .main-wrapper { flex: 1; overflow-y: auto; padding: 28px 24px; }
+        
+        .nav-btn { background:none;border:none;cursor:pointer;padding:13px 15px;color:${B.midGrey};font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;border-bottom:3px solid transparent;transition:all .2s;display:flex;align-items:center;gap:6px;white-space:nowrap; }
+        .nav-btn:hover { color:${B.teal}; } .nav-btn.active { color:${B.teal};border-bottom-color:${B.teal}; }
+        
+        .btn { border:none;border-radius:7px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:1px;text-transform:uppercase;transition:all .18s; }
+        .btn-primary { background:${B.teal};color:white;padding:10px 22px;font-size:14px; } .btn-primary:hover{background:${B.tealDark};}
+        .btn-primary:disabled { background:${B.lightGrey};color:${B.midGrey};cursor:not-allowed; }
+        .btn-ghost { background:${B.lightGrey};color:${B.charcoal};padding:8px 16px;font-size:13px; } .btn-ghost:hover{background:#d0dadc;}
+        .btn-edit { background:${B.tealLight};color:${B.teal};padding:6px 10px;font-size:12px; } .btn-edit:hover{background:${B.teal};color:white;}
+        .btn-danger { background:${B.redLight};color:${B.red};padding:6px 10px;font-size:12px; } .btn-danger:hover{background:${B.red};color:white;}
+        
+        .card { background:${B.white};border:1.5px solid ${B.lightGrey};border-radius:10px; }
+        .input { background:${B.white};border:1.5px solid ${B.lightGrey};color:${B.anthracite};border-radius:8px;padding:9px 13px;font-family:'Barlow',sans-serif;font-size:14px;width:100%;outline:none;transition:border-color .2s; } .input:focus{border-color:${B.teal};}
+        select.input option { background:white; } textarea.input { resize:vertical;min-height:80px; } input[type="file"].input { padding: 6px 10px; font-size: 13px; }
+        
+        .modal-bg { position:fixed;inset:0;background:rgba(28,28,28,.5);display:flex;align-items:center;justify-content:center;z-index:2000;padding:20px;backdrop-filter:blur(4px); }
+        .modal { background:${B.white};border-radius:14px;padding:30px;width:100%;max-width:520px;box-shadow:0 24px 64px rgba(0,0,0,.15);max-height:90vh;overflow-y:auto; }
+        
+        .cal-day { min-height:64px;background:${B.white};border:1.5px solid ${B.lightGrey};border-radius:8px;padding:6px;cursor:pointer;transition:all .15s; }
+        .cal-day:hover { border-color:${B.tealMid};background:#f0fbfc; } .cal-day.today{border-color:${B.teal};background:${B.tealLight};}
+        .cal-day.selected { border-color:${B.teal};background:#dff2f5;box-shadow:0 0 0 2px ${B.tealMid}; } .cal-day.other-month{opacity:.2;pointer-events:none;}
+        .event-bar { height:4px;border-radius:3px;margin:1px 0; }
+        
+        .tile { background:${B.white};border:1.5px solid ${B.lightGrey};border-radius:14px;padding:22px;cursor:pointer;transition:all .2s;display:flex;flex-direction:column;gap:12px; }
+        .tile:hover { border-color:${B.teal};transform:translateY(-2px);box-shadow:0 8px 24px rgba(41,184,200,.1); }
+        .team-card { background:${B.white};border:1.5px solid ${B.lightGrey};border-radius:10px;padding:18px 20px;cursor:pointer;transition:all .2s; }
+        .team-card:hover { border-color:${B.teal};transform:translateY(-2px);box-shadow:0 6px 20px rgba(41,184,200,.1); }
+        
+        .chat-me { background:${B.teal};color:white;border-radius:14px 14px 2px 14px;padding:9px 14px;max-width:78%;align-self:flex-end;font-size:14px;font-family:'Barlow',sans-serif; }
+        .chat-them { background:${B.white};border:1.5px solid ${B.lightGrey};border-radius:14px 14px 14px 2px;padding:9px 14px;max-width:78%;align-self:flex-start;font-size:14px;font-family:'Barlow',sans-serif; }
+        
+        .pill { border:none;border-radius:20px;padding:5px 13px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;letter-spacing:.8px;text-transform:uppercase;white-space:nowrap;transition:all .15s; flex-shrink: 0;}
+        .admin-tab { background:none;border:none;border-bottom:2px solid transparent;padding:10px 18px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:1px;text-transform:uppercase;color:${B.midGrey};transition:all .2s; white-space: nowrap;}
+        .admin-tab:hover { color:${B.amber}; } .admin-tab.active{color:${B.amber};border-bottom-color:${B.amber};}
+        
+        /* ── GRIDS & LAYOUTS ── */
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        .cal-layout { display: grid; grid-template-columns: 1fr 320px; gap: 24px; max-width: 1200px; margin: 0 auto; }
+        .schedule-grid { display: grid; grid-template-columns: 64px 3px 1fr auto; gap: 14px; align-items: center; padding: 14px 18px; transition: border-color .2s; }
+        .admin-list-item { display: grid; grid-template-columns: 160px 1fr 1fr 1fr auto; gap: 16px; align-items: center; padding: 14px 18px; }
+        .chat-layout { display: grid; grid-template-columns: 270px 1fr; background: ${B.white}; border-radius: 12px; border: 1.5px solid ${B.lightGrey}; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,.07); height: calc(100vh - 160px); min-height: 500px; }
+        
+        .bottom-nav { display: none; }
+        .mobile-back-btn { display: none; }
+        
+        /* ── MOBILE RESPONSIVENESS ── */
+        @media (max-width: 768px) {
+          .main-wrapper { padding: 16px 16px 100px 16px; }
+          .top-nav-links { display: none !important; }
+          .header-right { margin-left: auto; }
+          
+          /* Bottom App Bar */
+          .bottom-nav { display: flex; position: fixed; bottom: 0; left: 0; right: 0; background: ${B.white}; border-top: 1.5px solid ${B.lightGrey}; z-index: 1000; padding-bottom: env(safe-area-inset-bottom); justify-content: space-around; box-shadow: 0 -4px 20px rgba(0,0,0,0.05); }
+          .bottom-nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px 0 8px 0; color: ${B.midGrey}; font-family: 'Barlow Condensed', sans-serif; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; border: none; background: none; cursor: pointer; transition: color .2s;}
+          .bottom-nav-item.active { color: ${B.teal}; }
+          .bottom-nav-icon { font-size: 22px; margin-bottom: 2px; }
+          
+          /* Grids to Single Column */
+          .grid-2 { grid-template-columns: 1fr; }
+          .cal-layout { grid-template-columns: 1fr; gap: 16px; }
+          .cal-sidebar { order: -1; }
+          
+          .schedule-grid { grid-template-columns: 50px 3px 1fr; padding: 14px; position: relative; gap: 10px; }
+          .schedule-actions { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; margin-top: 4px; border-top: 1px dashed ${B.lightGrey}; padding-top: 12px; flex-direction: row !important; }
+          .event-card-inner { flex-direction: column; }
+          .event-card-actions { width: 100%; flex-direction: row !important; justify-content: space-between; align-items: center !important; margin-top: 8px; border-top: 1px dashed ${B.lightGrey}; padding-top: 10px; }
+          .event-card-admin-actions { margin-top: 0 !important; }
+
+          .admin-list-item { grid-template-columns: 1fr; gap: 8px; padding: 16px; }
+          .admin-list-actions { display: flex; gap: 8px; margin-top: 4px; padding-top: 10px; border-top: 1px dashed ${B.lightGrey}; }
+          .admin-tabs-container { overflow-x: auto; padding-bottom: 5px; }
+          
+          /* Chat Mobile View */
+          .chat-layout { grid-template-columns: 1fr; height: calc(100vh - 180px); border-radius: 8px; }
+          .chat-sidebar.mobile-hidden { display: none !important; }
+          .chat-main.mobile-hidden { display: none !important; }
+          .mobile-back-btn { display: block; background: none; border: none; font-size: 22px; cursor: pointer; margin-right: 12px; color: ${B.anthracite}; }
+          
+          /* Modals */
+          .modal { padding: 20px; }
+        }
       `}</style>
 
       {/* ── HEADER ── */}
@@ -683,7 +729,8 @@ export default function TVHindelangApp() {
             <div style={{fontSize:10,fontWeight:700,color:B.teal,letterSpacing:3,textTransform:"uppercase",marginTop:-2}}>FUSSBALL</div>
           </div>
         </div>
-        <nav style={{display:"flex",alignItems:"center"}}>
+        
+        <nav className="top-nav-links" style={{display:"flex",alignItems:"center"}}>
           {NAV.map(({id,icon,label})=>(
             <button key={id} className={`nav-btn ${view===id?"active":""}`} onClick={()=>{setView(id);setSelectedTeam(null);}}>
               <span>{icon}</span>{label}
@@ -696,8 +743,10 @@ export default function TVHindelangApp() {
               if(isTrainer && !isAdmin && adminSection !== "events" && adminSection !== "news") setAdminSection("events");
             }}>⚙️ Admin</button>
           )}
-          <button className="btn btn-ghost" style={{fontSize:11,padding:"5px 10px",marginLeft:4}} onClick={handleLogout}>Abmelden</button>
         </nav>
+        <div className="header-right">
+          <button className="btn btn-ghost" style={{fontSize:11,padding:"5px 10px"}} onClick={handleLogout}>Abmelden</button>
+        </div>
       </header>
 
       {/* ── FILTER BAR ── */}
@@ -710,7 +759,7 @@ export default function TVHindelangApp() {
       )}
 
       {/* ── CONTENT ── */}
-      <main style={{flex:1,overflow:"auto",padding:"28px 24px"}}>
+      <main className="main-wrapper">
 
         {/* ════ HOME ════ */}
         {view==="home"&&(
@@ -726,7 +775,7 @@ export default function TVHindelangApp() {
               </div>
               <p style={{fontFamily:"'Barlow',sans-serif",fontSize:15,lineHeight:1.65,opacity:.92,maxWidth:580}}>{introText}</p>
             </div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+            <div className="grid-2">
               <div className="tile" onClick={()=>setView("calendar")}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                   <span style={{fontSize:13,fontWeight:800,letterSpacing:1.5,textTransform:"uppercase",color:B.teal}}>📅 Nächste Termine</span>
@@ -806,7 +855,7 @@ export default function TVHindelangApp() {
 
         {/* ════ CALENDAR ════ */}
         {view==="calendar"&&(
-          <div style={{display:"grid",gridTemplateColumns:"1fr 320px",gap:24,maxWidth:1200,margin:"0 auto"}}>
+          <div className="cal-layout">
             <div>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}>
                 <h1 style={{fontSize:30,fontWeight:900,letterSpacing:2,textTransform:"uppercase"}}>{MONTHS[month]} <span style={{color:B.teal}}>{year}</span></h1>
@@ -839,7 +888,7 @@ export default function TVHindelangApp() {
                 <div style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:B.midGrey}}><div style={{width:10,height:10,borderRadius:2,background:BUS.color}}/>Bus reserviert</div>
               </div>
             </div>
-            <div className="card" style={{padding:20,alignSelf:"start"}}>
+            <div className="card cal-sidebar" style={{padding:20,alignSelf:"start"}}>
               {selectedDay ? (
                 <>
                   <div style={{marginBottom:16}}>
@@ -879,7 +928,7 @@ export default function TVHindelangApp() {
                     const hasDeclined = (ev.declines || []).includes(myName);
 
                     return (
-                      <div key={ev.id} className="card" style={{display:"grid",gridTemplateColumns:"64px 3px 1fr auto",gap:14,alignItems:"center",padding:"14px 18px",transition:"border-color .2s"}}
+                      <div key={ev.id} className="card schedule-grid"
                         onMouseEnter={e=>e.currentTarget.style.borderColor=hasBus?BUS.color:t.color}
                         onMouseLeave={e=>e.currentTarget.style.borderColor=B.lightGrey}>
                         <div style={{textAlign:"center"}}>
@@ -887,7 +936,7 @@ export default function TVHindelangApp() {
                           <div style={{fontSize:11,color:B.midGrey,fontWeight:700}}>{sd.month}</div>
                         </div>
                         <div style={{width:3,background:hasBus?BUS.color:t.color,borderRadius:2,alignSelf:"stretch"}}/>
-                        <div>
+                        <div style={{flex: 1}}>
                           <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3,flexWrap:"wrap"}}>
                             <span style={{fontWeight:800,fontSize:16}}>{ev.title}</span>
                             <Chip bg={t.bg} c={t.color}>{t.label}</Chip>
@@ -904,7 +953,7 @@ export default function TVHindelangApp() {
                             </div>
                           )}
                         </div>
-                        <div style={{display:"flex",flexDirection:"column",gap:6,alignItems:"flex-end"}}>
+                        <div className="schedule-actions">
                           <button className="btn btn-ghost" style={{padding:"5px 10px", fontSize:11, color: hasDeclined ? B.charcoal : B.red, background: hasDeclined ? B.lightGrey : B.redLight}} onClick={()=>toggleDecline(ev)}>
                             {hasDeclined ? "✅ Doch dabei" : "❌ Ich fehle"}
                           </button>
@@ -922,7 +971,7 @@ export default function TVHindelangApp() {
         {view==="teams"&&!selectedTeam&&(
           <div style={{maxWidth:1040,margin:"0 auto"}}>
             <h1 style={{fontSize:30,fontWeight:900,letterSpacing:2,textTransform:"uppercase",marginBottom:22}}>Mannschaften <span style={{color:B.teal}}>({teams.length})</span></h1>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:12}}>
+            <div className="grid-2" style={{gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))"}}>
               {teams.map(ti=>(
                 <div key={ti.id} className="team-card" onClick={()=>setSelectedTeam(ti)}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
@@ -991,68 +1040,76 @@ export default function TVHindelangApp() {
 
         {/* ════ MESSAGES (FÜR ALLE) ════ */}
         {view==="messages"&&(
-          <div style={{maxWidth:1100,margin:"0 auto",display:"grid",gridTemplateColumns:"270px 1fr",background:B.white,borderRadius:12,border:`1.5px solid ${B.lightGrey}`,overflow:"hidden",boxShadow:"0 4px 24px rgba(0,0,0,.07)",height:"calc(100vh - 160px)",minHeight:500}}>
-            <div style={{borderRight:`1.5px solid ${B.lightGrey}`,display:"flex",flexDirection:"column",background:B.offWhite}}>
-              <div style={{padding:"16px 14px",borderBottom:`1.5px solid ${B.lightGrey}`,background:B.white,flexShrink:0}}>
-                <div style={{fontSize:15,fontWeight:900,letterSpacing:1,textTransform:"uppercase"}}>Nachrichten</div>
-              </div>
-              <div style={{flex:1,overflow:"auto"}}>
-                {threads.map(th=>{
-                  const last=th.messages?.slice(-1)[0]; const isActive=activeThread?.id===th.id;
-                  return (
-                    <div key={th.id} style={{padding:"11px 14px",display:"flex",gap:10,alignItems:"center",cursor:"pointer",background:isActive?B.tealLight:"transparent",borderBottom:`1px solid ${B.lightGrey}`,transition:"background .15s"}} onClick={()=>setActiveThread(th)}>
-                      <div style={{width:38,height:38,borderRadius:th.type==="group"?"10px":"50%",background:`linear-gradient(135deg,${B.teal},${B.tealDark})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,color:"white",fontWeight:800,flexShrink:0}}>
-                        {th.type==="group"?"👥":th.label?.slice(0,2).toUpperCase()}
-                      </div>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontWeight:700,fontSize:14,color:isActive?B.teal:B.anthracite,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{th.label}</div>
-                        <div style={{fontSize:11,color:B.midGrey,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{last?`${last.from}: ${last.text}`:"Noch keine Nachrichten"}</div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              <div style={{padding:"12px 14px",borderTop:`1.5px solid ${B.lightGrey}`,background:B.white,flexShrink:0}}>
-                <button className="btn btn-primary" style={{width:"100%",fontSize:12,padding:9}} onClick={()=>setShowNewThread(true)}>+ Neuer Chat</button>
-              </div>
-            </div>
-            {activeThread ? (
-              <div style={{display:"flex",flexDirection:"column",height:"100%"}}>
-                <div style={{padding:"14px 20px",borderBottom:`1.5px solid ${B.lightGrey}`,display:"flex",alignItems:"center",gap:12,background:B.white,flexShrink:0}}>
-                  <div style={{width:38,height:38,borderRadius:activeThread.type==="group"?"10px":"50%",background:`linear-gradient(135deg,${B.teal},${B.tealDark})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,color:"white",fontWeight:800}}>
-                    {activeThread.type==="group"?"👥":activeThread.label?.slice(0,2).toUpperCase()}
-                  </div>
-                  <div>
-                    <div style={{fontWeight:800,fontSize:15}}>{activeThread.label}</div>
-                    <div style={{fontSize:11,color:B.midGrey}}>{activeThread.type==="group"?`Gruppen-Chat · ${activeThread.team}`:"Direktnachricht"}</div>
-                  </div>
+          <div style={{maxWidth:1100,margin:"0 auto"}}>
+            <div className="chat-layout">
+              {/* Seitenleiste (Threads) - Versteckt am Handy, wenn ein Chat offen ist */}
+              <div className={`chat-sidebar ${activeThread ? 'mobile-hidden' : ''}`} style={{borderRight:`1.5px solid ${B.lightGrey}`,background:B.offWhite}}>
+                <div style={{padding:"16px 14px",borderBottom:`1.5px solid ${B.lightGrey}`,background:B.white,flexShrink:0}}>
+                  <div style={{fontSize:15,fontWeight:900,letterSpacing:1,textTransform:"uppercase"}}>Nachrichten</div>
                 </div>
-                <div style={{flex:1,overflow:"auto",padding:20,display:"flex",flexDirection:"column",gap:10,background:B.offWhite}}>
-                  {(!activeThread.messages||activeThread.messages.length===0)&&<div style={{textAlign:"center",color:B.midGrey,padding:"40px 0",fontSize:14}}>Noch keine Nachrichten</div>}
-                  {activeThread.messages?.map((msg,i)=>{
-                    const myProfile = allUsers.find(u => u.id === user.uid);
-                    const isMe = msg.from === (myProfile?.name || user.email);
+                <div style={{flex:1,overflow:"auto"}}>
+                  {threads.map(th=>{
+                    const last=th.messages?.slice(-1)[0]; const isActive=activeThread?.id===th.id;
                     return (
-                      <div key={i} style={{display:"flex",flexDirection:"column",alignItems:isMe?"flex-end":"flex-start"}}>
-                        {!isMe&&<div style={{fontSize:11,color:B.midGrey,marginBottom:2,fontWeight:600}}>{msg.from}</div>}
-                        <div className={isMe?"chat-me":"chat-them"}>{msg.text}</div>
-                        <div style={{fontSize:10,color:B.midGrey,marginTop:3}}>{msg.time}</div>
+                      <div key={th.id} style={{padding:"11px 14px",display:"flex",gap:10,alignItems:"center",cursor:"pointer",background:isActive?B.tealLight:"transparent",borderBottom:`1px solid ${B.lightGrey}`,transition:"background .15s"}} onClick={()=>setActiveThread(th)}>
+                        <div style={{width:38,height:38,borderRadius:th.type==="group"?"10px":"50%",background:`linear-gradient(135deg,${B.teal},${B.tealDark})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,color:"white",fontWeight:800,flexShrink:0}}>
+                          {th.type==="group"?"👥":th.label?.slice(0,2).toUpperCase()}
+                        </div>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontWeight:700,fontSize:14,color:isActive?B.teal:B.anthracite,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{th.label}</div>
+                          <div style={{fontSize:11,color:B.midGrey,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{last?`${last.from}: ${last.text}`:"Noch keine Nachrichten"}</div>
+                        </div>
                       </div>
                     );
                   })}
-                  <div ref={chatEndRef}/>
                 </div>
-                <div style={{padding:"12px 16px",borderTop:`1.5px solid ${B.lightGrey}`,display:"flex",gap:10,background:B.white,flexShrink:0}}>
-                  <input className="input" placeholder="Nachricht schreiben..." value={chatInput} onChange={e=>setChatInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&sendMessage()} style={{flex:1}}/>
-                  <button className="btn btn-primary" style={{flexShrink:0,padding:"9px 20px"}} onClick={sendMessage}>➤</button>
+                <div style={{padding:"12px 14px",borderTop:`1.5px solid ${B.lightGrey}`,background:B.white,flexShrink:0}}>
+                  <button className="btn btn-primary" style={{width:"100%",fontSize:12,padding:9}} onClick={()=>setShowNewThread(true)}>+ Neuer Chat</button>
                 </div>
               </div>
-            ) : (
-              <div style={{display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12,color:B.midGrey,background:B.offWhite}}>
-                <div style={{fontSize:48}}>💬</div>
-                <div style={{fontSize:16,fontWeight:700}}>Chat auswählen</div>
+              
+              {/* Hauptbereich (Aktiver Chat) - Versteckt am Handy, wenn KEIN Chat offen ist */}
+              <div className={`chat-main ${!activeThread ? 'mobile-hidden' : ''}`} style={{background:B.white}}>
+                {activeThread ? (
+                  <>
+                    <div style={{padding:"14px 20px",borderBottom:`1.5px solid ${B.lightGrey}`,display:"flex",alignItems:"center",gap:12,background:B.white,flexShrink:0}}>
+                      <button className="mobile-back-btn" onClick={() => setActiveThread(null)}>←</button>
+                      <div style={{width:38,height:38,borderRadius:activeThread.type==="group"?"10px":"50%",background:`linear-gradient(135deg,${B.teal},${B.tealDark})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,color:"white",fontWeight:800}}>
+                        {activeThread.type==="group"?"👥":activeThread.label?.slice(0,2).toUpperCase()}
+                      </div>
+                      <div>
+                        <div style={{fontWeight:800,fontSize:15}}>{activeThread.label}</div>
+                        <div style={{fontSize:11,color:B.midGrey}}>{activeThread.type==="group"?`Gruppen-Chat · ${activeThread.team}`:"Direktnachricht"}</div>
+                      </div>
+                    </div>
+                    <div style={{flex:1,overflow:"auto",padding:20,display:"flex",flexDirection:"column",gap:10,background:B.offWhite}}>
+                      {(!activeThread.messages||activeThread.messages.length===0)&&<div style={{textAlign:"center",color:B.midGrey,padding:"40px 0",fontSize:14}}>Noch keine Nachrichten</div>}
+                      {activeThread.messages?.map((msg,i)=>{
+                        const myProfile = allUsers.find(u => u.id === user.uid);
+                        const isMe = msg.from === (myProfile?.name || user.email);
+                        return (
+                          <div key={i} style={{display:"flex",flexDirection:"column",alignItems:isMe?"flex-end":"flex-start"}}>
+                            {!isMe&&<div style={{fontSize:11,color:B.midGrey,marginBottom:2,fontWeight:600}}>{msg.from}</div>}
+                            <div className={isMe?"chat-me":"chat-them"}>{msg.text}</div>
+                            <div style={{fontSize:10,color:B.midGrey,marginTop:3}}>{msg.time}</div>
+                          </div>
+                        );
+                      })}
+                      <div ref={chatEndRef}/>
+                    </div>
+                    <div style={{padding:"12px 16px",borderTop:`1.5px solid ${B.lightGrey}`,display:"flex",gap:10,background:B.white,flexShrink:0}}>
+                      <input className="input" placeholder="Nachricht schreiben..." value={chatInput} onChange={e=>setChatInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&sendMessage()} style={{flex:1}}/>
+                      <button className="btn btn-primary" style={{flexShrink:0,padding:"9px 20px"}} onClick={sendMessage}>➤</button>
+                    </div>
+                  </>
+                ) : (
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12,color:B.midGrey,background:B.offWhite,height:"100%"}}>
+                    <div style={{fontSize:48}}>💬</div>
+                    <div style={{fontSize:16,fontWeight:700}}>Chat auswählen</div>
+                  </div>
+                )}
               </div>
-            )}
+            </div>
           </div>
         )}
 
@@ -1069,27 +1126,29 @@ export default function TVHindelangApp() {
               </div>
             </div>
             
-            <div style={{display:"flex",borderBottom:`1.5px solid ${B.lightGrey}`,marginBottom:24,marginTop:16,background:B.white,borderRadius:"8px 8px 0 0",overflow:"hidden",flexWrap:"wrap"}}>
-              {getAdminTabs().map(tab=>(
-                <button key={tab.id} className={`admin-tab ${adminSection===tab.id?"active":""}`} onClick={()=>setAdminSection(tab.id)}>{tab.label}</button>
-              ))}
+            <div className="admin-tabs-container">
+              <div style={{display:"flex",borderBottom:`1.5px solid ${B.lightGrey}`,marginBottom:24,marginTop:16,background:B.white,borderRadius:"8px 8px 0 0", width: "max-content", minWidth: "100%"}}>
+                {getAdminTabs().map(tab=>(
+                  <button key={tab.id} className={`admin-tab ${adminSection===tab.id?"active":""}`} onClick={()=>setAdminSection(tab.id)}>{tab.label}</button>
+                ))}
+              </div>
             </div>
 
             {adminSection==="teams"&&isAdmin&&(
               <div>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
                   <div style={{fontSize:16,fontWeight:800,letterSpacing:1,textTransform:"uppercase"}}>Mannschaften ({teams.length})</div>
-                  <button className="btn btn-primary" onClick={openAddTeam}>+ Mannschaft hinzufügen</button>
+                  <button className="btn btn-primary" onClick={openAddTeam}>+ Team</button>
                 </div>
                 <div style={{display:"flex",flexDirection:"column",gap:8}}>
                   {teams.length === 0 && <div style={{color:B.midGrey, fontSize:14}}>Keine Mannschaften gefunden. Leg eine neue an!</div>}
                   {teams.map(t=>(
-                    <div key={t.id} className="card" style={{display:"grid",gridTemplateColumns:"160px 1fr 1fr 1fr auto",gap:16,alignItems:"center",padding:"14px 18px"}}>
+                    <div key={t.id} className="card admin-list-item">
                       <div style={{fontWeight:800,fontSize:16}}>{t.name}</div>
                       <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif"}}>👤 {getTrainerNames(t)}</div>
                       <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif"}}>⏰ {t.training}</div>
                       <div style={{fontSize:13,color:B.midGrey,fontFamily:"'Barlow',sans-serif"}}>🎂 {t.jahrgang}</div>
-                      <div style={{display:"flex",gap:6}}>
+                      <div className="admin-list-actions">
                         <button className="btn btn-edit" onClick={()=>openEditTeam(t)}>✏️</button>
                         <button className="btn btn-danger" onClick={()=>deleteTeam(t.id)}>🗑️</button>
                       </div>
@@ -1101,15 +1160,15 @@ export default function TVHindelangApp() {
 
             {adminSection==="events"&&canEditEvents&&(
               <div>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16, flexWrap: "wrap", gap: 10}}>
                   <div style={{fontSize:16,fontWeight:800,letterSpacing:1,textTransform:"uppercase"}}>Termine ({events.length})</div>
                   
                   <div style={{display:"flex", gap: 10}}>
                     <input type="file" accept=".csv" style={{display: "none"}} ref={csvInputRef} onChange={handleCSVUpload} />
                     <button className="btn btn-ghost" onClick={() => csvInputRef.current?.click()} disabled={isImporting}>
-                      {isImporting ? "⏳ Importiere..." : "📥 CSV Importieren"}
+                      {isImporting ? "⏳ Lädt..." : "📥 CSV"}
                     </button>
-                    <button className="btn btn-primary" onClick={()=>openAddEvent()}>+ Termin hinzufügen</button>
+                    <button className="btn btn-primary" onClick={()=>openAddEvent()}>+ Termin</button>
                   </div>
                   
                 </div>
@@ -1117,7 +1176,7 @@ export default function TVHindelangApp() {
                   {[...events].sort((a,b)=>(a.date||"").localeCompare(b.date||"")).map(ev=>{
                     const t=typeOf(ev.type); const sd = safeDateObj(ev.date);
                     return (
-                      <div key={ev.id} className="card" style={{display:"grid",gridTemplateColumns:"80px 3px 1fr auto",gap:12,alignItems:"center",padding:"12px 16px"}}>
+                      <div key={ev.id} className="card schedule-grid">
                         <div style={{textAlign:"center"}}>
                           <div style={{fontSize:20,fontWeight:900,color:t.color,lineHeight:1}}>{sd.day}</div>
                           <div style={{fontSize:10,color:B.midGrey,fontWeight:700}}>{sd.month} {sd.year}</div>
@@ -1131,7 +1190,7 @@ export default function TVHindelangApp() {
                           </div>
                           <div style={{fontSize:12,color:B.midGrey}}>⏰ {ev.time} {ev.endTime ? `- ${ev.endTime}` : ""} · 📍 {ev.location}</div>
                         </div>
-                        <div style={{display:"flex",gap:6}}>
+                        <div className="schedule-actions">
                           <button className="btn btn-edit" style={{background:"#25D366", color:"white"}} onClick={()=>shareEventWhatsApp(ev)} title="In WhatsApp teilen">📲 WA</button>
                           <button className="btn btn-edit" onClick={()=>openEditEvent(ev)}>✏️</button>
                           <button className="btn btn-danger" onClick={()=>deleteEvent(ev.id)}>🗑️</button>
@@ -1147,12 +1206,12 @@ export default function TVHindelangApp() {
               <div>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
                   <div style={{fontSize:16,fontWeight:800,letterSpacing:1,textTransform:"uppercase"}}>News ({news.length})</div>
-                  <button className="btn btn-primary" onClick={openAddNews}>+ Neue Ankündigung</button>
+                  <button className="btn btn-primary" onClick={openAddNews}>+ News</button>
                 </div>
                 <div style={{display:"flex",flexDirection:"column",gap:10}}>
                   {news.map(n=>(
                     <div key={n.id} className="card" style={{padding:"16px 20px",borderLeft:`3px solid ${B.amber}`}}>
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12}} className="event-card-inner">
                         <div style={{flex:1}}>
                           <div style={{fontWeight:800,fontSize:16,marginBottom:4}}>{n.title}</div>
                           <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif",lineHeight:1.5,marginBottom:6}}>{n.body}</div>
@@ -1163,7 +1222,7 @@ export default function TVHindelangApp() {
                           )}
                           <div style={{fontSize:11,color:B.midGrey,fontWeight:600}}>{n.date} · {n.author}</div>
                         </div>
-                        <div style={{display:"flex",gap:6,flexShrink:0}}>
+                        <div className="event-card-actions">
                           <button className="btn btn-edit" style={{background:"#25D366", color:"white"}} onClick={()=>shareNewsWhatsApp(n)} title="In WhatsApp teilen">📲 WA</button>
                           <button className="btn btn-edit" onClick={()=>openEditEvent(n)}>✏️</button>
                           <button className="btn btn-danger" onClick={()=>deleteNews(n.id)}>🗑️</button>
@@ -1180,7 +1239,7 @@ export default function TVHindelangApp() {
               <div>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
                   <div style={{fontSize:16,fontWeight:800,letterSpacing:1,textTransform:"uppercase"}}>Benutzer ({allUsers.length})</div>
-                  <button className="btn btn-primary" onClick={openAddUser}>+ Neuen Nutzer anlegen</button>
+                  <button className="btn btn-primary" onClick={openAddUser}>+ Nutzer</button>
                 </div>
                 <div style={{display:"flex",flexDirection:"column",gap:8}}>
                   {allUsers.map(u=>{
@@ -1199,14 +1258,14 @@ export default function TVHindelangApp() {
                     const rc = getRoleColor(u.role);
                     
                     return (
-                      <div key={u.id} className="card" style={{display:"grid",gridTemplateColumns:"1fr 1fr 100px auto",gap:16,alignItems:"center",padding:"14px 18px"}}>
-                        <div style={{fontWeight:800,fontSize:16}}>{u.name || <span style={{color:B.midGrey,fontStyle:"italic"}}>Kein Name vergeben</span>}</div>
-                        <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif"}}>✉️ {u.email || u.id}</div>
+                      <div key={u.id} className="card admin-list-item" style={{gridTemplateColumns:"1fr 1fr auto auto"}}>
+                        <div style={{fontWeight:800,fontSize:16}}>{u.name || <span style={{color:B.midGrey,fontStyle:"italic"}}>Kein Name</span>}</div>
+                        <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif", overflow:"hidden", textOverflow:"ellipsis"}}>✉️ {u.email || u.id}</div>
                         <div>
                           <Chip bg={rc.bg} c={rc.c}>{getRoleLabel(u.role)}</Chip>
                         </div>
-                        <div style={{display:"flex",gap:6}}>
-                          <button className="btn btn-edit" onClick={()=>openEditUser(u)}>✏️ Bearbeiten</button>
+                        <div className="admin-list-actions">
+                          <button className="btn btn-edit" onClick={()=>openEditUser(u)}>✏️</button>
                           <button className="btn btn-danger" onClick={()=>deleteUser(u.id)}>🗑️</button>
                         </div>
                       </div>
@@ -1234,15 +1293,24 @@ export default function TVHindelangApp() {
         )}
       </main>
 
-      {/* ── FOOTER ── */}
-      <footer style={{background:B.white,borderTop:`1.5px solid ${B.lightGrey}`,padding:"10px 24px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
-        <div style={{fontSize:11,color:B.midGrey,fontWeight:600}}>© TV Hindelang Fussball</div>
-        <div style={{display:"flex",gap:20}}>
-          {[["Impressum","https://share.google/fPlP9Wjcsvyabws2C"],["Datenschutz","https://share.google/887uLP0KRXJTx68Ws"]].map(([label,url])=>(
-            <a key={label} href={url} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:B.midGrey,fontWeight:700,letterSpacing:1,textTransform:"uppercase",textDecoration:"none"}}>{label}</a>
-          ))}
-        </div>
-      </footer>
+      {/* ── MOBILE BOTTOM NAV ── */}
+      <nav className="bottom-nav">
+        {NAV.map(({id,icon,label})=>(
+          <button key={id} className={`bottom-nav-item ${view===id?"active":""}`} onClick={()=>{setView(id);setSelectedTeam(null); setActiveThread(null);}}>
+            <div className="bottom-nav-icon">{icon}</div>
+            {label}
+          </button>
+        ))}
+        {canAccessAdmin&&(
+          <button className={`bottom-nav-item ${view==="admin"?"active":""}`} onClick={()=>{
+            setView("admin");
+            if(isTrainer && !isAdmin && adminSection !== "events" && adminSection !== "news") setAdminSection("events");
+          }}>
+            <div className="bottom-nav-icon">⚙️</div>
+            Admin
+          </button>
+        )}
+      </nav>
 
       {/* ════ EVENT MODAL ════ */}
       {showEventModal&&(
@@ -1279,7 +1347,6 @@ export default function TVHindelangApp() {
                 </div>
               </div>
 
-              {/* WIEDERHOLUNGS-LOGIK (Nur bei neuen Terminen sichtbar) */}
               {!editingEvent && (
                 <div style={{marginTop: -4, background: eventForm.isRecurring ? B.tealLight : "transparent", padding: eventForm.isRecurring ? "10px 14px" : "0 4px", borderRadius: 8, transition: "all .2s"}}>
                   <label style={{display:"flex", alignItems:"center", gap:8, fontSize:14, fontWeight:700, cursor:"pointer", color: eventForm.isRecurring ? B.tealDark : B.charcoal}}>
@@ -1365,14 +1432,13 @@ export default function TVHindelangApp() {
         </div>
       )}
 
-      {/* ════ TEAM MODAL MIT MEHREREN TRAINERN ════ */}
+      {/* ════ TEAM MODAL ════ */}
       {showTeamModal&&(
         <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&setShowTeamModal(false)}>
           <div className="modal">
             <div style={{height:4,background:`linear-gradient(90deg,${B.green},${B.teal})`,borderRadius:"4px 4px 0 0",margin:"-30px -30px 22px"}}/>
             <h2 style={{fontSize:22,fontWeight:900,letterSpacing:1,textTransform:"uppercase",marginBottom:20}}>{editingTeam?"Mannschaft bearbeiten":"Neue Mannschaft"}</h2>
             <div style={{display:"flex",flexDirection:"column",gap:13}}>
-              
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
                 <div><label style={LBL}>Name *</label>
                   <input className="input" placeholder="z.B. G-Jugend" value={teamForm.name} onChange={e=>setTeamForm({...teamForm,name:e.target.value})}/>
@@ -1382,25 +1448,19 @@ export default function TVHindelangApp() {
                 </div>
               </div>
 
-              {/* DYNAMISCHE TRAINER LISTE */}
               <div>
                 <label style={LBL}>Trainer & Betreuer</label>
                 {teamForm.trainers.map((tr, idx) => (
                   <div key={idx} style={{display:"flex", gap:8, marginBottom:8}}>
                     <input className="input" placeholder="Name" value={tr.name} onChange={e => {
-                      const newTr = [...teamForm.trainers];
-                      newTr[idx].name = e.target.value;
-                      setTeamForm({...teamForm, trainers: newTr});
+                      const newTr = [...teamForm.trainers]; newTr[idx].name = e.target.value; setTeamForm({...teamForm, trainers: newTr});
                     }} />
                     <input className="input" placeholder="Telefon" value={tr.phone} onChange={e => {
-                      const newTr = [...teamForm.trainers];
-                      newTr[idx].phone = e.target.value;
-                      setTeamForm({...teamForm, trainers: newTr});
+                      const newTr = [...teamForm.trainers]; newTr[idx].phone = e.target.value; setTeamForm({...teamForm, trainers: newTr});
                     }} />
                     {teamForm.trainers.length > 1 && (
                       <button className="btn btn-danger" style={{padding:"0 12px", fontSize:14}} onClick={() => {
-                        const newTr = teamForm.trainers.filter((_, i) => i !== idx);
-                        setTeamForm({...teamForm, trainers: newTr});
+                        const newTr = teamForm.trainers.filter((_, i) => i !== idx); setTeamForm({...teamForm, trainers: newTr});
                       }}>X</button>
                     )}
                   </div>
@@ -1413,7 +1473,6 @@ export default function TVHindelangApp() {
               <div><label style={LBL}>Trainingszeiten</label>
                 <input className="input" placeholder="z.B. Di & Do 17:00 Uhr" value={teamForm.training} onChange={e=>setTeamForm({...teamForm,training:e.target.value})}/>
               </div>
-              
               <div style={{display:"flex",gap:10,marginTop:4}}>
                 <button className="btn btn-ghost" style={{flex:1}} onClick={()=>setShowTeamModal(false)}>Abbrechen</button>
                 <button className="btn btn-primary" style={{flex:2}} onClick={saveTeam} disabled={!teamForm.name}>{editingTeam?"✓ Speichern":"+ Erstellen"}</button>
@@ -1432,26 +1491,14 @@ export default function TVHindelangApp() {
               {editingUser ? "Benutzer bearbeiten" : "Neuen Benutzer anlegen"}
             </h2>
             <div style={{display:"flex",flexDirection:"column",gap:13}}>
-              
               {!editingUser && (
                 <>
-                  <div>
-                    <label style={LBL}>E-Mail *</label>
-                    <input className="input" type="email" placeholder="spieler@email.de" value={userForm.email} onChange={e=>setUserForm({...userForm,email:e.target.value})}/>
-                  </div>
-                  <div>
-                    <label style={LBL}>Passwort *</label>
-                    <input className="input" type="password" placeholder="Mindestens 6 Zeichen" value={userForm.password} onChange={e=>setUserForm({...userForm,password:e.target.value})}/>
-                  </div>
+                  <div><label style={LBL}>E-Mail *</label><input className="input" type="email" placeholder="spieler@email.de" value={userForm.email} onChange={e=>setUserForm({...userForm,email:e.target.value})}/></div>
+                  <div><label style={LBL}>Passwort *</label><input className="input" type="password" placeholder="Mindestens 6 Zeichen" value={userForm.password} onChange={e=>setUserForm({...userForm,password:e.target.value})}/></div>
                 </>
               )}
-
-              <div>
-                <label style={LBL}>Anzeigename</label>
-                <input className="input" placeholder="z.B. Max Mustermann" value={userForm.name} onChange={e=>setUserForm({...userForm,name:e.target.value})}/>
-              </div>
-              <div>
-                <label style={LBL}>Rolle</label>
+              <div><label style={LBL}>Anzeigename</label><input className="input" placeholder="z.B. Max Mustermann" value={userForm.name} onChange={e=>setUserForm({...userForm,name:e.target.value})}/></div>
+              <div><label style={LBL}>Rolle</label>
                 <select className="input" value={userForm.role} onChange={e=>setUserForm({...userForm,role:e.target.value})}>
                   <option value="admin">Administrator</option>
                   <option value="trainer">Trainer</option>
@@ -1459,9 +1506,7 @@ export default function TVHindelangApp() {
                   <option value="parent">Eltern</option>
                 </select>
               </div>
-
               {userError && <div style={{color:B.red,fontSize:13,fontFamily:"'Barlow',sans-serif",marginTop:4}}>❌ {userError}</div>}
-
               <div style={{display:"flex",gap:10,marginTop:12}}>
                 <button className="btn btn-ghost" style={{flex:1}} onClick={()=>setShowUserModal(false)} disabled={userSaving}>Abbrechen</button>
                 <button className="btn btn-primary" style={{flex:2}} onClick={saveUser} disabled={userSaving || (!editingUser && (!userForm.email || !userForm.password))}>
@@ -1497,14 +1542,9 @@ export default function TVHindelangApp() {
                   {allUsers.length > 0 ? (
                     <select className="input" value={newThreadName} onChange={e=>setNewThreadName(e.target.value)}>
                       <option value="">Bitte wählen...</option>
-                      {allUsers.map(u => {
-                        const displayName = u.name || u.email || `Benutzer (${u.id.substring(0,6)})`;
-                        return (
-                          <option key={u.id} value={displayName}>
-                            {displayName}
-                          </option>
-                        );
-                      })}
+                      {allUsers.map(u => (
+                        <option key={u.id} value={u.name || u.email || `Benutzer (${u.id.substring(0,6)})`}>{u.name || u.email}</option>
+                      ))}
                     </select>
                   ) : (
                     <div style={{fontSize:13, color:B.midGrey}}>Lade Benutzer...</div>
