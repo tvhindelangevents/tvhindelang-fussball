@@ -28,7 +28,7 @@ const db      = getFirestore(firebaseApp);
 const auth    = getAuth(firebaseApp);
 const storage = getStorage(firebaseApp);
 
-// "Secondary App" Trick: Erlaubt das Erstellen von Usern durch den Admin, ohne ihn auszuloggen
+// "Secondary App" Trick: Erlaubt das Erstellen von Usern, ohne den aktuellen Admin auszuloggen
 const secondaryApp = getApps().find(a => a.name === "Secondary") || initializeApp(firebaseConfig, "Secondary");
 const secondaryAuth = getAuth(secondaryApp);
 
@@ -228,17 +228,13 @@ export default function TVHindelangApp() {
       return;
     }
     try {
-      // Nutzt den normalen Auth (nicht secondary), da der Nutzer nach Registrierung sofort eingeloggt sein soll
       const userCredential = await createUserWithEmailAndPassword(auth, loginEmail, loginPassword);
-      
-      // Benutzer in der Datenbank speichern
       await setDoc(doc(db, "users", userCredential.user.uid), {
         email: loginEmail,
         name: registerName,
-        role: "player", // Standard-Rolle für Neuanmeldungen
+        role: "player",
         createdAt: serverTimestamp()
       });
-
       setLoginEmail(""); setLoginPassword(""); setRegisterName("");
     } catch (e) {
       if (e.code === 'auth/email-already-in-use') setLoginError("Diese E-Mail ist bereits registriert.");
@@ -271,9 +267,9 @@ export default function TVHindelangApp() {
     
     let newDeclines = ev.declines || [];
     if (newDeclines.includes(myName)) {
-      newDeclines = newDeclines.filter(n => n !== myName); // Zusagen
+      newDeclines = newDeclines.filter(n => n !== myName); 
     } else {
-      newDeclines.push(myName); // Absagen
+      newDeclines.push(myName); 
     }
     await updateDoc(doc(db, "events", ev.id), { declines: newDeclines });
   };
@@ -287,7 +283,11 @@ export default function TVHindelangApp() {
     else await addDoc(collection(db,"events"), {...eventForm, createdAt: serverTimestamp()});
     setShowEventModal(false);
   };
-  const deleteEvent = async (id) => { await deleteDoc(doc(db,"events",id)); };
+  const deleteEvent = async (id) => { 
+    if (window.confirm("Möchtest du diesen Termin wirklich löschen?")) {
+      await deleteDoc(doc(db,"events",id)); 
+    }
+  };
 
   // ── News CRUD ────────────────────────────────────────────
   const openAddNews = () => { 
@@ -321,7 +321,11 @@ export default function TVHindelangApp() {
     
     setNewsSaving(false); setShowNewsModal(false);
   };
-  const deleteNews = async (id) => { await deleteDoc(doc(db,"news",id)); };
+  const deleteNews = async (id) => { 
+    if (window.confirm("Möchtest du diese News wirklich löschen?")) {
+      await deleteDoc(doc(db,"news",id)); 
+    }
+  };
 
   // ── Team CRUD ────────────────────────────────────────────
   const openAddTeam  = () => { 
@@ -354,7 +358,11 @@ export default function TVHindelangApp() {
     else await addDoc(collection(db,"teams"), finalData);
     setShowTeamModal(false);
   };
-  const deleteTeam = async (id) => { await deleteDoc(doc(db,"teams",id)); };
+  const deleteTeam = async (id) => { 
+    if (window.confirm("Möchtest du diese Mannschaft wirklich löschen?")) {
+      await deleteDoc(doc(db,"teams",id)); 
+    }
+  };
 
   // ── User CRUD (Admin Area) ───────────────────────────────
   const openAddUser = () => {
@@ -387,7 +395,6 @@ export default function TVHindelangApp() {
           setUserSaving(false);
           return;
         }
-        // Vom Admin erstellter Account: Secondary Auth verhindert Ausloggen des Admins!
         const userCredential = await createUserWithEmailAndPassword(secondaryAuth, userForm.email, userForm.password);
         const newUid = userCredential.user.uid;
         
@@ -407,6 +414,12 @@ export default function TVHindelangApp() {
     }
     
     setUserSaving(false);
+  };
+
+  const deleteUser = async (id) => {
+    if (window.confirm("Möchtest du diesen Benutzer aus der App entfernen?")) {
+      await deleteDoc(doc(db,"users",id));
+    }
   };
 
   // ── Intro text ───────────────────────────────────────────
@@ -801,6 +814,10 @@ export default function TVHindelangApp() {
                 ? <div style={{textAlign:"center",color:B.midGrey,padding:48}}>Keine Termine für diese Auswahl</div>
                 : upcoming.map(ev=>{
                     const t=typeOf(ev.type); const d=new Date(ev.date); const hasBus=ev.bus1||ev.bus2;
+                    const myProfile = allUsers.find(u => u.id === user?.uid);
+                    const myName = myProfile?.name || user?.email;
+                    const hasDeclined = (ev.declines || []).includes(myName);
+
                     return (
                       <div key={ev.id} className="card" style={{display:"grid",gridTemplateColumns:"64px 3px 1fr auto",gap:14,alignItems:"center",padding:"14px 18px",transition:"border-color .2s"}}
                         onMouseEnter={e=>e.currentTarget.style.borderColor=hasBus?BUS.color:t.color}
@@ -820,8 +837,19 @@ export default function TVHindelangApp() {
                           </div>
                           <div style={{color:B.midGrey,fontSize:12}}>⏰ {ev.time} {ev.endTime ? `- ${ev.endTime}` : ""} Uhr · 📍 {ev.location}</div>
                           {ev.notes&&<div style={{fontSize:12,color:B.charcoal,marginTop:2,fontStyle:"italic",fontFamily:"'Barlow',sans-serif"}}>{ev.notes}</div>}
+                          
+                          {canEditEvents && ev.declines && ev.declines.length > 0 && (
+                            <div style={{marginTop: 6, fontSize: 12, color: B.red, fontFamily:"'Barlow',sans-serif"}}>
+                              <strong>❌ {ev.declines.length} Absage(n):</strong> {ev.declines.join(", ")}
+                            </div>
+                          )}
                         </div>
-                        {canEditEvents&&<div style={{display:"flex",gap:6}}><button className="btn btn-edit" style={{background:"#25D366", color:"white"}} onClick={()=>shareEventWhatsApp(ev)} title="In WhatsApp teilen">📲 WA</button><button className="btn btn-edit" onClick={()=>openEditEvent(ev)}>✏️</button><button className="btn btn-danger" onClick={()=>deleteEvent(ev.id)}>🗑️</button></div>}
+                        <div style={{display:"flex",flexDirection:"column",gap:6,alignItems:"flex-end"}}>
+                          <button className="btn btn-ghost" style={{padding:"5px 10px", fontSize:11, color: hasDeclined ? B.charcoal : B.red, background: hasDeclined ? B.lightGrey : B.redLight}} onClick={()=>toggleDecline(ev)}>
+                            {hasDeclined ? "✅ Doch dabei" : "❌ Ich fehle"}
+                          </button>
+                          {canEditEvents&&<div style={{display:"flex",gap:6}}><button className="btn btn-edit" style={{background:"#25D366", color:"white"}} onClick={()=>shareEventWhatsApp(ev)}>📲 WA</button><button className="btn btn-edit" onClick={()=>openEditEvent(ev)}>✏️</button><button className="btn btn-danger" onClick={()=>deleteEvent(ev.id)}>🗑️</button></div>}
+                        </div>
                       </div>
                     );
                   })
@@ -861,7 +889,6 @@ export default function TVHindelangApp() {
                 {isAdmin&&<button className="btn btn-edit" onClick={()=>openEditTeam(selectedTeam)}>✏️ Bearbeiten</button>}
               </div>
 
-              {/* TRAINER DETAILS */}
               <div style={{display:"flex",gap:16,alignItems:"flex-start",padding:"14px 0",borderBottom:`1px solid ${B.lightGrey}`}}>
                 <div style={{width:36,height:36,borderRadius:"50%",background:B.tealLight,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>👤</div>
                 <div>
@@ -1070,7 +1097,7 @@ export default function TVHindelangApp() {
                         </div>
                         <div style={{display:"flex",gap:6,flexShrink:0}}>
                           <button className="btn btn-edit" style={{background:"#25D366", color:"white"}} onClick={()=>shareNewsWhatsApp(n)} title="In WhatsApp teilen">📲 WA</button>
-                          <button className="btn btn-edit" onClick={()=>openEditEvent(n)}>✏️</button>
+                          <button className="btn btn-edit" onClick={()=>openEditNews(n)}>✏️</button>
                           <button className="btn btn-danger" onClick={()=>deleteNews(n.id)}>🗑️</button>
                         </div>
                       </div>
@@ -1080,7 +1107,6 @@ export default function TVHindelangApp() {
               </div>
             )}
 
-            {/* Benutzerverwaltung Content */}
             {adminSection==="users"&&isAdmin&&(
               <div>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
@@ -1111,7 +1137,8 @@ export default function TVHindelangApp() {
                           <Chip bg={rc.bg} c={rc.c}>{getRoleLabel(u.role)}</Chip>
                         </div>
                         <div style={{display:"flex",gap:6}}>
-                          <button className="btn btn-edit" onClick={()=>openEditUser(u)}>✏️ Bearbeiten</button>
+                          <button className="btn btn-edit" onClick={()=>openEditUser(u)}>✏️</button>
+                          <button className="btn btn-danger" onClick={()=>deleteUser(u.id)}>🗑️</button>
                         </div>
                       </div>
                     )
