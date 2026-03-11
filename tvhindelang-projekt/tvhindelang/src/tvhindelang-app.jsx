@@ -53,12 +53,11 @@ const DAYS   = ["Mo","Di","Mi","Do","Fr","Sa","So"];
 const MONTHS = ["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
 const typeOf = (v) => EVENT_TYPES.find(t=>t.value===v)||EVENT_TYPES[3];
 
-// Leere Startliste (wird aus der DB geladen)
 const INIT_TEAMS = []; 
-
 const INIT_INTRO = "Die Fußballabteilung des TV Hindelang e.V. vereint alle aktiven Mannschaften. Hier findet ihr Termine, Spielpläne und Vereinsnews an einem Ort.";
 
-const emptyEvent = (date="") => ({ type:"training", title:"", date, time:"17:00", endTime:"", location:"", notes:"", team:"Herren", bus1:false, bus2:false });
+// EVENT INIT (NEU: declines Array)
+const emptyEvent = (date="") => ({ type:"training", title:"", date, time:"17:00", endTime:"", location:"", notes:"", team:"Herren", bus1:false, bus2:false, declines: [] });
 const emptyTeamForm = () => ({ name: "", trainers: [{ name: "", phone: "" }], training: "", jahrgang: "" });
 
 const LBL = { fontSize:11, fontWeight:700, letterSpacing:1, color:B.midGrey, textTransform:"uppercase", display:"block", marginBottom:5 };
@@ -75,12 +74,11 @@ const Chip = ({ bg, c, border, children }) => (
   <span style={{display:"inline-block",padding:"2px 9px",borderRadius:20,fontSize:11,fontWeight:700,letterSpacing:.8,textTransform:"uppercase",background:bg,color:c,border:border||"none"}}>{children}</span>
 );
 
-// Hilfsfunktion zur Darstellung der Trainernamen als Text
 const getTrainerNames = (team) => {
   if (team.trainers && team.trainers.length > 0) {
     return team.trainers.map(tr => tr.name).filter(Boolean).join(", ") || "N.N.";
   }
-  return team.trainer || "N.N."; // Fallback für alte Daten
+  return team.trainer || "N.N.";
 };
 
 // ─── MAIN ────────────────────────────────────────────────────
@@ -220,9 +218,37 @@ export default function TVHindelangApp() {
   };
   const handleLogout = async () => { await signOut(auth); setView("home"); };
 
+  // ── WHATSAPP SHARE LOGIK ──
+  const shareEventWhatsApp = (ev) => {
+    const d = new Date(ev.date);
+    const dateStr = `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth()+1).padStart(2, '0')}.`;
+    const text = `⚽ *Neuer Termin: ${ev.title}*\n📅 ${dateStr}, ${ev.time} Uhr\n📍 ${ev.location || "Heim"}\n👥 ${ev.team}\n\n👉 Bitte in der TVH App prüfen und bei Nicht-Teilnahme auf 'Ich fehle' klicken!`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+  };
+
+  const shareNewsWhatsApp = (n) => {
+    const text = `📢 *TVH News: ${n.title}*\n\n${n.body}\n\n👉 Jetzt in der TVH App ansehen!`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+  };
+
+  // ── ABSAGE LOGIK (RSVP) ──
+  const toggleDecline = async (ev) => {
+    if (!user) return;
+    const myProfile = allUsers.find(u => u.id === user.uid);
+    const myName = myProfile?.name || user.email; // Finde Klarnamen
+    
+    let newDeclines = ev.declines || [];
+    if (newDeclines.includes(myName)) {
+      newDeclines = newDeclines.filter(n => n !== myName); // Wieder zusagen
+    } else {
+      newDeclines.push(myName); // Absagen
+    }
+    await updateDoc(doc(db, "events", ev.id), { declines: newDeclines });
+  };
+
   // ── Event CRUD ───────────────────────────────────────────
   const openAddEvent = (date="") => { setEditingEvent(null); setEventForm(emptyEvent(date)); setShowEventModal(true); };
-  const openEditEvent = (ev) => { setEditingEvent(ev); setEventForm({type:ev.type,title:ev.title,date:ev.date,time:ev.time,endTime:ev.endTime||"",location:ev.location||"",notes:ev.notes||"",team:ev.team||"Herren",bus1:ev.bus1||false,bus2:ev.bus2||false}); setShowEventModal(true); };
+  const openEditEvent = (ev) => { setEditingEvent(ev); setEventForm({type:ev.type,title:ev.title,date:ev.date,time:ev.time,endTime:ev.endTime||"",location:ev.location||"",notes:ev.notes||"",team:ev.team||"Herren",bus1:ev.bus1||false,bus2:ev.bus2||false,declines:ev.declines||[]}); setShowEventModal(true); };
   const saveEvent = async () => {
     if (!eventForm.title||!eventForm.date) return;
     if (editingEvent) await updateDoc(doc(db,"events",editingEvent.id), eventForm);
@@ -274,7 +300,6 @@ export default function TVHindelangApp() {
   const openEditTeam = (t) => { 
     setEditingTeam(t); 
     let loadedTrainers = t.trainers || [];
-    // Fallback für alte Daten (wenn nur ein String 'trainer' vorlag)
     if (loadedTrainers.length === 0 && t.trainer) {
       loadedTrainers = [{ name: t.trainer, phone: "" }];
     } else if (loadedTrainers.length === 0) {
@@ -290,7 +315,6 @@ export default function TVHindelangApp() {
   };
   const saveTeam = async () => {
     if (!teamForm.name) return;
-    // Leere Trainer-Einträge entfernen
     const cleanTrainers = teamForm.trainers.filter(tr => tr.name.trim() !== "");
     const finalData = { ...teamForm, trainers: cleanTrainers };
 
@@ -394,12 +418,21 @@ export default function TVHindelangApp() {
   ];
 
   const EventCard = ({ ev, controls=true }) => {
-    const t=typeOf(ev.type); const hasBus=ev.bus1||ev.bus2;
+    const t=typeOf(ev.type); 
+    const hasBus=ev.bus1||ev.bus2;
+    const myProfile = allUsers.find(u => u.id === user?.uid);
+    const myName = myProfile?.name || user?.email;
+    const hasDeclined = (ev.declines || []).includes(myName);
+
+    // Prüfe, ob das Event in den letzten 48 Stunden erstellt wurde
+    const isNew = ev.createdAt && ev.createdAt.toDate() > new Date(Date.now() - 48 * 60 * 60 * 1000);
+
     return (
       <div style={{borderLeft:`3px solid ${hasBus?BUS.color:t.color}`,background:hasBus?BUS.bg:t.bg,borderRadius:"0 8px 8px 0",padding:"11px 13px",marginBottom:10}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
           <div style={{flex:1,minWidth:0}}>
             <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:5}}>
+              {isNew && <Chip bg={B.amberLight} c={B.amber}>NEU</Chip>}
               <Chip bg={t.color+"22"} c={t.color}>{t.label}</Chip>
               {ev.team&&<Chip bg={B.anthracite+"11"} c={B.charcoal}>{ev.team}</Chip>}
               {ev.bus1&&<Chip bg={BUS.bg} c={BUS.color} border={`1px solid ${BUS.border}`}>🚌 Bus 1</Chip>}
@@ -409,13 +442,30 @@ export default function TVHindelangApp() {
             <div style={{fontSize:13,color:B.teal,fontWeight:700,marginTop:2}}>⏰ {ev.time} {ev.endTime ? `- ${ev.endTime}` : ""} Uhr</div>
             {ev.location&&<div style={{fontSize:12,color:B.midGrey,marginTop:1}}>📍 {ev.location}</div>}
             {ev.notes&&<div style={{fontSize:12,color:B.charcoal,marginTop:4,fontStyle:"italic",fontFamily:"'Barlow',sans-serif"}}>{ev.notes}</div>}
+            
+            {/* ABSAGEN ANZEIGE FÜR TRAINER */}
+            {canEditEvents && ev.declines && ev.declines.length > 0 && (
+              <div style={{marginTop: 8, padding: "6px 8px", background: B.redLight, borderRadius: 6, fontSize: 12, color: B.red, fontFamily:"'Barlow',sans-serif"}}>
+                <strong>❌ {ev.declines.length} Absage(n):</strong> {ev.declines.join(", ")}
+              </div>
+            )}
           </div>
-          {canEditEvents&&controls&&(
-            <div style={{display:"flex",flexDirection:"column",gap:4,flexShrink:0}}>
-              <button className="btn btn-edit" onClick={()=>openEditEvent(ev)}>✏️</button>
-              <button className="btn btn-danger" onClick={()=>deleteEvent(ev.id)}>🗑️</button>
-            </div>
-          )}
+          
+          <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0, alignItems:"flex-end"}}>
+            {/* ABSAGE BUTTON FÜR ALLE SPIELER */}
+            <button className="btn btn-ghost" style={{padding:"5px 10px", fontSize:11, color: hasDeclined ? B.charcoal : B.red, background: hasDeclined ? B.lightGrey : B.redLight}} onClick={(e)=>{e.stopPropagation(); toggleDecline(ev);}}>
+              {hasDeclined ? "✅ Doch dabei" : "❌ Ich fehle"}
+            </button>
+
+            {/* ADMIN/TRAINER CONTROLS */}
+            {canEditEvents&&controls&&(
+              <div style={{display:"flex", gap:4, marginTop: 4}}>
+                <button className="btn btn-edit" style={{background:"#25D366", color:"white"}} onClick={(e)=>{e.stopPropagation(); shareEventWhatsApp(ev);}} title="In WhatsApp teilen">📲 WA</button>
+                <button className="btn btn-edit" onClick={(e)=>{e.stopPropagation(); openEditEvent(ev);}}>✏️</button>
+                <button className="btn btn-danger" onClick={(e)=>{e.stopPropagation(); deleteEvent(ev.id);}}>🗑️</button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -715,7 +765,7 @@ export default function TVHindelangApp() {
                           <div style={{color:B.midGrey,fontSize:12}}>⏰ {ev.time} {ev.endTime ? `- ${ev.endTime}` : ""} Uhr · 📍 {ev.location}</div>
                           {ev.notes&&<div style={{fontSize:12,color:B.charcoal,marginTop:2,fontStyle:"italic",fontFamily:"'Barlow',sans-serif"}}>{ev.notes}</div>}
                         </div>
-                        {canEditEvents&&<div style={{display:"flex",gap:6}}><button className="btn btn-edit" onClick={()=>openEditEvent(ev)}>✏️</button><button className="btn btn-danger" onClick={()=>deleteEvent(ev.id)}>🗑️</button></div>}
+                        {canEditEvents&&<div style={{display:"flex",gap:6}}><button className="btn btn-edit" style={{background:"#25D366", color:"white"}} onClick={()=>shareEventWhatsApp(ev)}>📲 WA</button><button className="btn btn-edit" onClick={()=>openEditEvent(ev)}>✏️</button><button className="btn btn-danger" onClick={()=>deleteEvent(ev.id)}>🗑️</button></div>}
                       </div>
                     );
                   })
@@ -777,7 +827,6 @@ export default function TVHindelangApp() {
                 </div>
               </div>
 
-              {/* TRAININGSZEITEN & JAHRGANG */}
               {[{icon:"⏰",label:"Trainingszeiten",val:selectedTeam.training},{icon:"🎂",label:"Jahrgang",val:selectedTeam.jahrgang}].map(row=>(
                 <div key={row.label} style={{display:"flex",gap:16,alignItems:"center",padding:"14px 0",borderBottom:`1px solid ${B.lightGrey}`}}>
                   <div style={{width:36,height:36,borderRadius:"50%",background:B.tealLight,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>{row.icon}</div>
@@ -932,6 +981,7 @@ export default function TVHindelangApp() {
                           <div style={{fontSize:12,color:B.midGrey}}>⏰ {ev.time} {ev.endTime ? `- ${ev.endTime}` : ""} · 📍 {ev.location}</div>
                         </div>
                         <div style={{display:"flex",gap:6}}>
+                          <button className="btn btn-edit" style={{background:"#25D366", color:"white"}} onClick={()=>shareEventWhatsApp(ev)} title="In WhatsApp teilen">📲 WA</button>
                           <button className="btn btn-edit" onClick={()=>openEditEvent(ev)}>✏️</button>
                           <button className="btn btn-danger" onClick={()=>deleteEvent(ev.id)}>🗑️</button>
                         </div>
@@ -963,6 +1013,7 @@ export default function TVHindelangApp() {
                           <div style={{fontSize:11,color:B.midGrey,fontWeight:600}}>{n.date} · {n.author}</div>
                         </div>
                         <div style={{display:"flex",gap:6,flexShrink:0}}>
+                          <button className="btn btn-edit" style={{background:"#25D366", color:"white"}} onClick={()=>shareNewsWhatsApp(n)} title="In WhatsApp teilen">📲 WA</button>
                           <button className="btn btn-edit" onClick={()=>openEditNews(n)}>✏️</button>
                           <button className="btn btn-danger" onClick={()=>deleteNews(n.id)}>🗑️</button>
                         </div>
@@ -973,7 +1024,6 @@ export default function TVHindelangApp() {
               </div>
             )}
 
-            {/* Benutzerverwaltung Content */}
             {adminSection==="users"&&isAdmin&&(
               <div>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
