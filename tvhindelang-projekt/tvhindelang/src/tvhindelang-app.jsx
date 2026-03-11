@@ -204,7 +204,7 @@ export default function TVHindelangApp() {
 
   // ── Event CRUD ───────────────────────────────────────────
   const openAddEvent = (date="") => { setEditingEvent(null); setEventForm(emptyEvent(date)); setShowEventModal(true); };
-  const openEditEvent = (ev) => { setEditingEvent(ev); setEventForm({type:ev.type,title:ev.title,date:ev.date,time:ev.time,location:ev.location||"",notes:ev.notes||"",team:ev.team||"Herren",bus1:ev.bus1||false,bus2:ev.bus2||false}); setShowEventModal(true); };
+  const openEditEvent = (ev) => { setEditingEvent(ev); setEventForm({type:ev.type,title:ev.title,date:ev.date,time:ev.time,endTime:ev.endTime||"",location:ev.location||"",notes:ev.notes||"",team:ev.team||"Herren",bus1:ev.bus1||false,bus2:ev.bus2||false}); setShowEventModal(true); };
   const saveEvent = async () => {
     if (!eventForm.title||!eventForm.date) return;
     if (editingEvent) await updateDoc(doc(db,"events",editingEvent.id), eventForm);
@@ -288,7 +288,7 @@ export default function TVHindelangApp() {
               {ev.bus2&&<Chip bg={BUS.bg} c={BUS.color} border={`1px solid ${BUS.border}`}>🚌 Bus 2</Chip>}
             </div>
             <div style={{fontWeight:800,fontSize:15}}>{ev.title}</div>
-            <div style={{fontSize:13,color:B.teal,fontWeight:700,marginTop:2}}>⏰ {ev.time} Uhr</div>
+            <div style={{fontSize:13,color:B.teal,fontWeight:700,marginTop:2}}>⏰ {ev.time} {ev.endTime ? `- ${ev.endTime}` : ""} Uhr</div>
             {ev.location&&<div style={{fontSize:12,color:B.midGrey,marginTop:1}}>📍 {ev.location}</div>}
             {ev.notes&&<div style={{fontSize:12,color:B.charcoal,marginTop:4,fontStyle:"italic",fontFamily:"'Barlow',sans-serif"}}>{ev.notes}</div>}
           </div>
@@ -448,7 +448,7 @@ export default function TVHindelangApp() {
                           </div>
                           <div style={{flex:1,minWidth:0}}>
                             <div style={{fontWeight:800,fontSize:14,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{ev.title}</div>
-                            <div style={{fontSize:11,color:B.midGrey}}>⏰ {ev.time} · {ev.team}</div>
+                            <div style={{fontSize:11,color:B.midGrey}}>⏰ {ev.time} {ev.endTime ? `- ${ev.endTime}` : ""} · {ev.team}</div>
                           </div>
                         </div>
                       );
@@ -470,7 +470,7 @@ export default function TVHindelangApp() {
                       </div>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{fontWeight:800,fontSize:13,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{ev.title}</div>
-                        <div style={{fontSize:11,color:B.midGrey}}>{ev.team} · {ev.time} Uhr</div>
+                        <div style={{fontSize:11,color:B.midGrey}}>{ev.team} · {ev.time} {ev.endTime ? `- ${ev.endTime}` : ""} Uhr</div>
                       </div>
                     </div>
                   );
@@ -590,7 +590,7 @@ export default function TVHindelangApp() {
                             {ev.bus1&&<Chip bg={BUS.bg} c={BUS.color} border={`1px solid ${BUS.border}`}>🚌 Bus 1</Chip>}
                             {ev.bus2&&<Chip bg={BUS.bg} c={BUS.color} border={`1px solid ${BUS.border}`}>🚌 Bus 2</Chip>}
                           </div>
-                          <div style={{color:B.midGrey,fontSize:12}}>⏰ {ev.time} Uhr · 📍 {ev.location}</div>
+                          <div style={{color:B.midGrey,fontSize:12}}>⏰ {ev.time} {ev.endTime ? `- ${ev.endTime}` : ""} Uhr · 📍 {ev.location}</div>
                           {ev.notes&&<div style={{fontSize:12,color:B.charcoal,marginTop:2,fontStyle:"italic",fontFamily:"'Barlow',sans-serif"}}>{ev.notes}</div>}
                         </div>
                         {isAdmin&&<div style={{display:"flex",gap:6}}><button className="btn btn-edit" onClick={()=>openEditEvent(ev)}>✏️</button><button className="btn btn-danger" onClick={()=>deleteEvent(ev.id)}>🗑️</button></div>}
@@ -777,7 +777,7 @@ export default function TVHindelangApp() {
                             <Chip bg={t.bg} c={t.color}>{t.label}</Chip>
                             <Chip bg={B.anthracite+"11"} c={B.charcoal}>{ev.team}</Chip>
                           </div>
-                          <div style={{fontSize:12,color:B.midGrey}}>⏰ {ev.time} · 📍 {ev.location}</div>
+                          <div style={{fontSize:12,color:B.midGrey}}>⏰ {ev.time} {ev.endTime ? `- ${ev.endTime}` : ""} · 📍 {ev.location}</div>
                         </div>
                         <div style={{display:"flex",gap:6}}>
                           <button className="btn btn-edit" onClick={()=>openEditEvent(ev)}>✏️</button>
@@ -866,12 +866,15 @@ export default function TVHindelangApp() {
               <div><label style={LBL}>Titel *</label>
                 <input className="input" placeholder="z.B. Heimspiel vs. SV Musterstadt" value={eventForm.title} onChange={e=>setEventForm({...eventForm,title:e.target.value})}/>
               </div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}}>
                 <div><label style={LBL}>Datum *</label>
                   <input className="input" type="date" value={eventForm.date} onChange={e=>setEventForm({...eventForm,date:e.target.value})}/>
                 </div>
-                <div><label style={LBL}>Uhrzeit</label>
+                <div><label style={LBL}>Startzeit</label>
                   <input className="input" type="time" value={eventForm.time} onChange={e=>setEventForm({...eventForm,time:e.target.value})}/>
+                </div>
+                <div><label style={LBL}>Endzeit</label>
+                  <input className="input" type="time" value={eventForm.endTime} onChange={e=>setEventForm({...eventForm,endTime:e.target.value})}/>
                 </div>
               </div>
               <div><label style={LBL}>Ort</label>
