@@ -22,13 +22,11 @@ const firebaseConfig = {
   appId: "1:719897877586:web:de42747cfe009aa2c7138b"
 };
 
-// Verhindert Fehler beim Neuladen (Hot Reloading) in React
 const firebaseApp = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 const db      = getFirestore(firebaseApp);
 const auth    = getAuth(firebaseApp);
 const storage = getStorage(firebaseApp);
 
-// "Secondary App" Trick: Erlaubt das Erstellen von Usern, ohne den aktuellen Admin auszuloggen
 const secondaryApp = getApps().find(a => a.name === "Secondary") || initializeApp(firebaseConfig, "Secondary");
 const secondaryAuth = getAuth(secondaryApp);
 
@@ -80,6 +78,18 @@ const getTrainerNames = (team) => {
   return team.trainer || "N.N.";
 };
 
+// SICHERHEITS-HELFER FÜR DATUMSFORMATIERUNG (Verhindert White Screen of Death)
+const safeDateObj = (dateString) => {
+  if (!dateString) return { day: "?", month: "???", year: "????" };
+  const d = new Date(dateString);
+  if (isNaN(d.getTime())) return { day: "?", month: "???", year: "????" };
+  return { 
+    day: d.getDate(), 
+    month: MONTHS[d.getMonth()] ? MONTHS[d.getMonth()].slice(0,3).toUpperCase() : "???",
+    year: d.getFullYear()
+  };
+};
+
 // ─── MAIN ────────────────────────────────────────────────────
 export default function TVHindelangApp() {
   // ── Auth state ──
@@ -87,7 +97,6 @@ export default function TVHindelangApp() {
   const [userRole, setUserRole]   = useState(null);  
   const [authLoading, setAuthLoading] = useState(true);
   
-  // Login / Register Form State
   const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [loginEmail, setLoginEmail]       = useState("");
   const [loginPassword, setLoginPassword] = useState("");
@@ -137,12 +146,10 @@ export default function TVHindelangApp() {
   const [userSaving, setUserSaving]         = useState(false);
   const [userError, setUserError]           = useState("");
 
-  // ── Messages ──
+  // ── Messages & CSV ──
   const [activeThread, setActiveThread] = useState(null);
   const [chatInput, setChatInput]       = useState("");
   const chatEndRef = useRef(null);
-
-  // ── CSV Import ──
   const csvInputRef = useRef(null);
   const [isImporting, setIsImporting] = useState(false);
 
@@ -250,7 +257,7 @@ export default function TVHindelangApp() {
 
   const handleLogout = async () => { await signOut(auth); setView("home"); };
 
-  // ── CSV IMPORT LOGIK (DFBNET / BFV) ────────────────────────
+  // ── CSV IMPORT LOGIK (ABSTURZSICHER) ────────────────────────
   const handleCSVUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -258,7 +265,6 @@ export default function TVHindelangApp() {
     setIsImporting(true);
     const reader = new FileReader();
     
-    // windows-1252 liest die Umlaute von DFB-Exporten meist fehlerfrei
     reader.onload = async (event) => {
       const text = event.target.result;
       const lines = text.split(/\r?\n/).filter(line => line.trim() !== "");
@@ -268,7 +274,6 @@ export default function TVHindelangApp() {
         return;
       }
 
-      // Prüfe auf Trennzeichen (Komma oder Semikolon)
       const delimiter = lines[0].includes(";") ? ";" : ",";
       const headers = lines[0].split(delimiter).map(h => h.trim().replace(/^"|"$/g, '').toLowerCase());
 
@@ -279,13 +284,12 @@ export default function TVHindelangApp() {
         const row = {};
         headers.forEach((header, index) => { row[header] = values[index] || ""; });
 
-        // Finde die relevanten Spalten unabhängig von der exakten Schreibweise
         const dateKey = headers.find(h => h.includes("datum") || h === "date" || h === "tag");
         const timeKey = headers.find(h => h.includes("zeit") || h.includes("anstoß") || h === "time" || h.includes("uhr"));
         const heimKey = headers.find(h => h.includes("heim") || h.includes("team"));
         const gastKey = headers.find(h => h.includes("gast") || h.includes("gegner"));
         const ortKey = headers.find(h => h.includes("ort") || h.includes("stätte"));
-        const spielKey = headers.find(h => h.includes("spiel") || h.includes("begegnung")); // Fallback
+        const spielKey = headers.find(h => h.includes("spiel") || h.includes("begegnung")); 
 
         let rawDate = dateKey ? row[dateKey] : "";
         let rawTime = timeKey ? row[timeKey] : "";
@@ -293,8 +297,7 @@ export default function TVHindelangApp() {
         let gast = gastKey ? row[gastKey] : "";
         let ort = ortKey ? row[ortKey] : "";
 
-        // Wenn Heim und Gast nicht separat existieren, aber "Spielpaarung"
-        if (!heim && !gast && spielKey) {
+        if (!heim && !gast && spielKey && row[spielKey]) {
             const parts = row[spielKey].split("-");
             if (parts.length > 1) {
                 heim = parts[0].trim();
@@ -304,24 +307,24 @@ export default function TVHindelangApp() {
             }
         }
 
-        if (!rawDate || !heim) continue; // Zeile überspringen, wenn leer
+        if (!rawDate || !heim) continue; 
 
         // Datum konvertieren: DD.MM.YYYY zu YYYY-MM-DD
         let formattedDate = rawDate;
-        if (rawDate.includes(".")) {
+        if (rawDate.match(/^\d{1,2}\.\d{1,2}\.\d{2,4}/)) {
           const parts = rawDate.split(".");
-          if(parts.length === 3) {
-            let year = parts[2].length === 2 ? '20' + parts[2] : parts[2];
-            formattedDate = `${year}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`;
-          }
+          let year = parts[2].length === 2 ? '20' + parts[2] : parts[2];
+          formattedDate = `${year}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`;
         }
+        
+        // SCHUTZ: Wenn das Datum kaputt ist (z.B. "Spielfrei"), überspringen wir die Zeile!
+        if (isNaN(new Date(formattedDate).getTime())) continue;
 
-        // Uhrzeit konvertieren (z.B. 17.00 zu 17:00)
-        let formattedTime = rawTime.replace(".", ":").substring(0, 5);
+        let formattedTime = (rawTime || "").replace(".", ":").substring(0, 5);
+        if (!formattedTime.match(/^\d{2}:\d{2}$/)) formattedTime = "12:00"; // Fallback für kaputte Uhrzeiten
 
-        // Titel & eigene Mannschaft erkennen
         let title = `${heim} vs. ${gast}`;
-        let teamName = heim; // Standardmäßig das Heimteam
+        let teamName = heim; 
         
         if (heim.toLowerCase().includes("hindelang") || heim.toLowerCase().includes("tvh")) {
           title = `Heimspiel vs. ${gast}`;
@@ -352,7 +355,7 @@ export default function TVHindelangApp() {
       
       alert(`${count} Spiele wurden erfolgreich in den Kalender importiert! Die Busse kannst du jetzt per "Bearbeiten" (✏️) hinzufügen.`);
       setIsImporting(false);
-      if (csvInputRef.current) csvInputRef.current.value = ""; // Input zurücksetzen
+      if (csvInputRef.current) csvInputRef.current.value = ""; 
     };
     reader.readAsText(file, "windows-1252");
   };
@@ -360,7 +363,7 @@ export default function TVHindelangApp() {
   // ── WHATSAPP SHARE LOGIK ──
   const shareEventWhatsApp = (ev) => {
     const d = new Date(ev.date);
-    const dateStr = `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth()+1).padStart(2, '0')}.`;
+    const dateStr = !isNaN(d.getTime()) ? `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth()+1).padStart(2, '0')}.` : ev.date;
     const text = `⚽ *Neuer Termin: ${ev.title}*\n📅 ${dateStr}, ${ev.time} Uhr\n📍 ${ev.location || "Heim"}\n👥 ${ev.team}\n\n👉 Bitte in der TVH App prüfen und bei Nicht-Teilnahme auf 'Ich fehle' klicken!`;
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   };
@@ -475,46 +478,29 @@ export default function TVHindelangApp() {
     }
   };
 
-  // ── User CRUD (Admin Area) ───────────────────────────────
+  // ── User CRUD ────────────────────────────────────────────
   const openAddUser = () => {
     setEditingUser(null);
     setUserError("");
     setUserForm({ name: "", email: "", password: "", role: "player" });
     setShowUserModal(true);
   };
-  
   const openEditUser = (u) => {
     setEditingUser(u);
     setUserError("");
     setUserForm({ name: u.name || "", email: u.email || "", password: "", role: u.role || "player" });
     setShowUserModal(true);
   };
-
   const saveUser = async () => {
-    setUserError("");
-    setUserSaving(true);
-    
+    setUserError(""); setUserSaving(true);
     try {
       if (editingUser) {
-        await updateDoc(doc(db, "users", editingUser.id), {
-          name: userForm.name,
-          role: userForm.role
-        });
+        await updateDoc(doc(db, "users", editingUser.id), { name: userForm.name, role: userForm.role });
       } else {
-        if (!userForm.email || !userForm.password) {
-          setUserError("E-Mail und Passwort sind Pflichtfelder für neue Nutzer.");
-          setUserSaving(false);
-          return;
-        }
+        if (!userForm.email || !userForm.password) { setUserError("E-Mail und Passwort sind Pflichtfelder für neue Nutzer."); setUserSaving(false); return; }
         const userCredential = await createUserWithEmailAndPassword(secondaryAuth, userForm.email, userForm.password);
         const newUid = userCredential.user.uid;
-        
-        await setDoc(doc(db, "users", newUid), {
-          email: userForm.email,
-          name: userForm.name,
-          role: userForm.role,
-          createdAt: serverTimestamp()
-        });
+        await setDoc(doc(db, "users", newUid), { email: userForm.email, name: userForm.name, role: userForm.role, createdAt: serverTimestamp() });
         await signOut(secondaryAuth);
       }
       setShowUserModal(false);
@@ -523,17 +509,14 @@ export default function TVHindelangApp() {
       else if (err.code === 'auth/weak-password') setUserError("Das Passwort muss mindestens 6 Zeichen lang sein.");
       else setUserError("Fehler: " + err.message);
     }
-    
     setUserSaving(false);
   };
-
   const deleteUser = async (id) => {
     if (window.confirm("Möchtest du diesen Benutzer unwiderruflich aus der App entfernen?")) {
       await deleteDoc(doc(db,"users",id));
     }
   };
 
-  // ── Intro text ───────────────────────────────────────────
   const saveIntro = async (text) => { await setDoc(doc(db,"settings","intro"), { text }); };
 
   // ── Messages ─────────────────────────────────────────────
@@ -541,7 +524,6 @@ export default function TVHindelangApp() {
     if (!chatInput.trim()||!activeThread) return;
     const myProfile = allUsers.find(u => u.id === user.uid);
     const senderName = myProfile?.name || user.email;
-
     const msg = { from: senderName, text:chatInput, time: new Date().toLocaleTimeString("de",{hour:"2-digit",minute:"2-digit"}) };
     const updated = [...(activeThread.messages||[]), msg];
     await updateDoc(doc(db,"threads",activeThread.id), { messages: updated });
@@ -555,16 +537,18 @@ export default function TVHindelangApp() {
     setShowNewThread(false); setNewThreadName("");
   };
 
-  // ── Calendar helpers ─────────────────────────────────────
+  // ── Sortierung & Helpers ─────────────────────────────────────
   const matchesFilter = (ev) => filterTeam==="Alle Mannschaften"||ev.team===filterTeam||ev.team==="Alle Mannschaften";
   const getDay = (day) => {
     const d=`${year}-${String(month+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
     return events.filter(e=>e.date===d&&matchesFilter(e));
   };
+  
+  // Abgesicherte Sortierung, um leere Datumsfelder aufzufangen
   const selectedStr = selectedDay ? `${year}-${String(month+1).padStart(2,"0")}-${String(selectedDay).padStart(2,"0")}` : "";
-  const selectedEvs = selectedDay ? events.filter(e=>e.date===selectedStr&&matchesFilter(e)).sort((a,b)=>a.time?.localeCompare(b.time)) : [];
-  const upcoming    = [...events].filter(e=>e.date>=todayStr&&matchesFilter(e)).sort((a,b)=>a.date?.localeCompare(b.date)||a.time?.localeCompare(b.time)).slice(0,10);
-  const nextThree   = [...events].filter(e=>e.date>=todayStr).sort((a,b)=>a.date?.localeCompare(b.date)||a.time?.localeCompare(b.time)).slice(0,3);
+  const selectedEvs = selectedDay ? events.filter(e=>e.date===selectedStr&&matchesFilter(e)).sort((a,b)=>(a.time||"").localeCompare(b.time||"")) : [];
+  const upcoming    = [...events].filter(e=>(e.date||"")>=todayStr&&matchesFilter(e)).sort((a,b)=>(a.date||"").localeCompare(b.date||"")||(a.time||"").localeCompare(b.time||"")).slice(0,10);
+  const nextThree   = [...events].filter(e=>(e.date||"")>=todayStr).sort((a,b)=>(a.date||"").localeCompare(b.date||"")||(a.time||"").localeCompare(b.time||"")).slice(0,3);
 
   const NAV = [
     { id:"home",     icon:"🏠", label:"Start"        },
@@ -580,7 +564,7 @@ export default function TVHindelangApp() {
     const myProfile = allUsers.find(u => u.id === user?.uid);
     const myName = myProfile?.name || user?.email;
     const hasDeclined = (ev.declines || []).includes(myName);
-    const isNew = ev.createdAt && ev.createdAt.toDate() > new Date(Date.now() - 48 * 60 * 60 * 1000);
+    const isNew = ev.createdAt?.toDate ? ev.createdAt.toDate() > new Date(Date.now() - 48 * 60 * 60 * 1000) : false;
 
     return (
       <div style={{borderLeft:`3px solid ${hasBus?BUS.color:t.color}`,background:hasBus?BUS.bg:t.bg,borderRadius:"0 8px 8px 0",padding:"11px 13px",marginBottom:10}}>
@@ -786,12 +770,12 @@ export default function TVHindelangApp() {
                 {nextThree.length===0
                   ? <div style={{fontSize:13,color:B.midGrey,fontFamily:"'Barlow',sans-serif"}}>Keine kommenden Termine</div>
                   : nextThree.map(ev=>{
-                      const t=typeOf(ev.type); const d=new Date(ev.date); const hasBus=ev.bus1||ev.bus2;
+                      const t=typeOf(ev.type); const sd=safeDateObj(ev.date); const hasBus=ev.bus1||ev.bus2;
                       return (
                         <div key={ev.id} style={{display:"flex",gap:12,alignItems:"center",padding:"9px 11px",background:B.offWhite,borderRadius:8,borderLeft:`3px solid ${hasBus?BUS.color:t.color}`}}>
                           <div style={{textAlign:"center",minWidth:30,flexShrink:0}}>
-                            <div style={{fontSize:19,fontWeight:900,color:hasBus?BUS.color:t.color,lineHeight:1}}>{d.getDate()}</div>
-                            <div style={{fontSize:10,color:B.midGrey,fontWeight:700}}>{MONTHS[d.getMonth()].slice(0,3).toUpperCase()}</div>
+                            <div style={{fontSize:19,fontWeight:900,color:hasBus?BUS.color:t.color,lineHeight:1}}>{sd.day}</div>
+                            <div style={{fontSize:10,color:B.midGrey,fontWeight:700}}>{sd.month}</div>
                           </div>
                           <div style={{flex:1,minWidth:0}}>
                             <div style={{fontWeight:800,fontSize:14,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{ev.title}</div>
@@ -807,13 +791,13 @@ export default function TVHindelangApp() {
                   <span style={{fontSize:13,fontWeight:800,letterSpacing:1.5,textTransform:"uppercase",color:B.red}}>📋 Spielplan</span>
                   <span style={{fontSize:11,color:B.midGrey,fontWeight:600}}>Alle Spiele →</span>
                 </div>
-                {events.filter(e=>e.type==="game"&&e.date>=todayStr).sort((a,b)=>a.date?.localeCompare(b.date)).slice(0,3).map(ev=>{
-                  const d=new Date(ev.date);
+                {events.filter(e=>e.type==="game"&&(e.date||"")>=todayStr).sort((a,b)=>(a.date||"").localeCompare(b.date||"")).slice(0,3).map(ev=>{
+                  const sd=safeDateObj(ev.date);
                   return (
                     <div key={ev.id} style={{display:"flex",gap:10,alignItems:"center",padding:"9px 11px",background:B.redLight,borderRadius:8}}>
                       <div style={{textAlign:"center",minWidth:28,flexShrink:0}}>
-                        <div style={{fontSize:17,fontWeight:900,color:B.red,lineHeight:1}}>{d.getDate()}</div>
-                        <div style={{fontSize:10,color:B.red,fontWeight:700,opacity:.7}}>{MONTHS[d.getMonth()].slice(0,3).toUpperCase()}</div>
+                        <div style={{fontSize:17,fontWeight:900,color:B.red,lineHeight:1}}>{sd.day}</div>
+                        <div style={{fontSize:10,color:B.red,fontWeight:700,opacity:.7}}>{sd.month}</div>
                       </div>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{fontWeight:800,fontSize:13,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{ev.title}</div>
@@ -924,7 +908,7 @@ export default function TVHindelangApp() {
               {upcoming.length===0
                 ? <div style={{textAlign:"center",color:B.midGrey,padding:48}}>Keine Termine für diese Auswahl</div>
                 : upcoming.map(ev=>{
-                    const t=typeOf(ev.type); const d=new Date(ev.date); const hasBus=ev.bus1||ev.bus2;
+                    const t=typeOf(ev.type); const sd=safeDateObj(ev.date); const hasBus=ev.bus1||ev.bus2;
                     const myProfile = allUsers.find(u => u.id === user?.uid);
                     const myName = myProfile?.name || user?.email;
                     const hasDeclined = (ev.declines || []).includes(myName);
@@ -934,8 +918,8 @@ export default function TVHindelangApp() {
                         onMouseEnter={e=>e.currentTarget.style.borderColor=hasBus?BUS.color:t.color}
                         onMouseLeave={e=>e.currentTarget.style.borderColor=B.lightGrey}>
                         <div style={{textAlign:"center"}}>
-                          <div style={{fontSize:24,fontWeight:900,color:hasBus?BUS.color:t.color,lineHeight:1}}>{d.getDate()}</div>
-                          <div style={{fontSize:11,color:B.midGrey,fontWeight:700}}>{MONTHS[d.getMonth()].slice(0,3).toUpperCase()}</div>
+                          <div style={{fontSize:24,fontWeight:900,color:hasBus?BUS.color:t.color,lineHeight:1}}>{sd.day}</div>
+                          <div style={{fontSize:11,color:B.midGrey,fontWeight:700}}>{sd.month}</div>
                         </div>
                         <div style={{width:3,background:hasBus?BUS.color:t.color,borderRadius:2,alignSelf:"stretch"}}/>
                         <div>
@@ -1033,8 +1017,8 @@ export default function TVHindelangApp() {
 
               <div style={{marginTop:20}}>
                 <div style={{fontSize:12,fontWeight:700,letterSpacing:1,color:B.midGrey,textTransform:"uppercase",marginBottom:10}}>Nächste Termine</div>
-                {events.filter(e=>e.team===selectedTeam.name&&e.date>=todayStr).sort((a,b)=>a.date?.localeCompare(b.date)).slice(0,4).map(ev=><EventCard key={ev.id} ev={ev} controls={false}/>)}
-                {events.filter(e=>e.team===selectedTeam.name&&e.date>=todayStr).length===0&&<div style={{fontSize:13,color:B.midGrey,fontFamily:"'Barlow',sans-serif"}}>Keine kommenden Termine</div>}
+                {events.filter(e=>e.team===selectedTeam.name&&(e.date||"")>=todayStr).sort((a,b)=>(a.date||"").localeCompare(b.date||"")).slice(0,4).map(ev=><EventCard key={ev.id} ev={ev} controls={false}/>)}
+                {events.filter(e=>e.team===selectedTeam.name&&(e.date||"")>=todayStr).length===0&&<div style={{fontSize:13,color:B.midGrey,fontFamily:"'Barlow',sans-serif"}}>Keine kommenden Termine</div>}
               </div>
             </div>
           </div>
@@ -1166,13 +1150,13 @@ export default function TVHindelangApp() {
                   
                 </div>
                 <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                  {[...events].sort((a,b)=>a.date?.localeCompare(b.date)).map(ev=>{
-                    const t=typeOf(ev.type); const d=new Date(ev.date);
+                  {[...events].sort((a,b)=>(a.date||"").localeCompare(b.date||"")).map(ev=>{
+                    const t=typeOf(ev.type); const sd = safeDateObj(ev.date);
                     return (
                       <div key={ev.id} className="card" style={{display:"grid",gridTemplateColumns:"80px 3px 1fr auto",gap:12,alignItems:"center",padding:"12px 16px"}}>
                         <div style={{textAlign:"center"}}>
-                          <div style={{fontSize:20,fontWeight:900,color:t.color,lineHeight:1}}>{d.getDate()}</div>
-                          <div style={{fontSize:10,color:B.midGrey,fontWeight:700}}>{MONTHS[d.getMonth()].slice(0,3).toUpperCase()} {d.getFullYear()}</div>
+                          <div style={{fontSize:20,fontWeight:900,color:t.color,lineHeight:1}}>{sd.day}</div>
+                          <div style={{fontSize:10,color:B.midGrey,fontWeight:700}}>{sd.month} {sd.year}</div>
                         </div>
                         <div style={{width:3,background:t.color,borderRadius:2,alignSelf:"stretch"}}/>
                         <div>
