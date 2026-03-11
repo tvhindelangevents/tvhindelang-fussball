@@ -101,7 +101,7 @@ export default function TVHindelangApp() {
   const [teams, setTeams]     = useState(INIT_TEAMS);
   const [news, setNews]       = useState([]);
   const [threads, setThreads] = useState([]);
-  const [allUsers, setAllUsers] = useState([]); // NEU: Liste aller Benutzer
+  const [allUsers, setAllUsers] = useState([]); // Liste aller Benutzer
   const [introText, setIntroText] = useState(INIT_INTRO);
   const [dataLoaded, setDataLoaded] = useState(false);
 
@@ -185,10 +185,15 @@ export default function TVHindelangApp() {
     unsubs.push(onSnapshot(collection(db,"threads"), snap => {
       setThreads(snap.docs.map(d=>({id:d.id,...d.data(),messages:d.data().messages||[]})));
     }));
-    // all users (NEU für das Dropdown)
-    unsubs.push(onSnapshot(collection(db,"users"), snap => {
-      if (!snap.empty) setAllUsers(snap.docs.map(d=>({id:d.id,...d.data()})));
-    }));
+    // all users (NEU: robusteres Laden für das Dropdown)
+    unsubs.push(onSnapshot(collection(db,"users"), 
+      snap => {
+        setAllUsers(snap.docs.map(d=>({id:d.id,...d.data()})));
+      },
+      error => {
+        console.error("Firebase Fehler beim Laden der Benutzer:", error);
+      }
+    ));
     // intro text
     unsubs.push(onSnapshot(doc(db,"settings","intro"), snap => {
       if (snap.exists()) setIntroText(snap.data().text || INIT_INTRO);
@@ -1064,14 +1069,18 @@ export default function TVHindelangApp() {
                   {allUsers.length > 0 ? (
                     <select className="input" value={newThreadName} onChange={e=>setNewThreadName(e.target.value)}>
                       <option value="">Bitte wählen...</option>
-                      {allUsers.map(u => (
-                        <option key={u.id} value={u.name || u.email}>
-                          {u.name || u.email}
-                        </option>
-                      ))}
+                      {allUsers.map(u => {
+                        // Fallback, falls kein Name oder keine Email vergeben wurde
+                        const displayName = u.name || u.email || `Benutzer (${u.id.substring(0,6)})`;
+                        return (
+                          <option key={u.id} value={displayName}>
+                            {displayName}
+                          </option>
+                        );
+                      })}
                     </select>
                   ) : (
-                    <div style={{fontSize:13, color:B.midGrey}}>Keine Benutzer gefunden.</div>
+                    <div style={{fontSize:13, color:B.midGrey}}>Lade Benutzer...</div>
                   )}
                 </div>
             }
