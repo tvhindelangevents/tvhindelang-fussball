@@ -101,6 +101,7 @@ export default function TVHindelangApp() {
   const [teams, setTeams]     = useState(INIT_TEAMS);
   const [news, setNews]       = useState([]);
   const [threads, setThreads] = useState([]);
+  const [allUsers, setAllUsers] = useState([]); // NEU: Liste aller Benutzer
   const [introText, setIntroText] = useState(INIT_INTRO);
   const [dataLoaded, setDataLoaded] = useState(false);
 
@@ -119,7 +120,6 @@ export default function TVHindelangApp() {
   
   const [showNewsModal, setShowNewsModal]   = useState(false);
   const [editingNews, setEditingNews]       = useState(null);
-  // NewsForm erweitert für Datei-Upload
   const [newsForm, setNewsForm]             = useState({ title:"", body:"", fileUrl:"", fileName:"", fileObj:null });
   const [newsSaving, setNewsSaving]         = useState(false);
 
@@ -185,6 +185,10 @@ export default function TVHindelangApp() {
     unsubs.push(onSnapshot(collection(db,"threads"), snap => {
       setThreads(snap.docs.map(d=>({id:d.id,...d.data(),messages:d.data().messages||[]})));
     }));
+    // all users (NEU für das Dropdown)
+    unsubs.push(onSnapshot(collection(db,"users"), snap => {
+      if (!snap.empty) setAllUsers(snap.docs.map(d=>({id:d.id,...d.data()})));
+    }));
     // intro text
     unsubs.push(onSnapshot(doc(db,"settings","intro"), snap => {
       if (snap.exists()) setIntroText(snap.data().text || INIT_INTRO);
@@ -239,7 +243,6 @@ export default function TVHindelangApp() {
     let finalFileUrl = newsForm.fileUrl;
     let finalFileName = newsForm.fileName;
 
-    // Wenn eine neue Datei ausgewählt wurde, lade sie hoch
     if (newsForm.fileObj) {
       try {
         const fileRef = ref(storage, `news/${Date.now()}_${newsForm.fileObj.name}`);
@@ -248,7 +251,6 @@ export default function TVHindelangApp() {
         finalFileName = newsForm.fileObj.name;
       } catch (err) {
         console.error("Fehler beim Upload:", err);
-        // Alert oder Fehlerbehandlung optional hier
       }
     }
 
@@ -1059,7 +1061,18 @@ export default function TVHindelangApp() {
                   </select>
                 </div>
               : <div><label style={LBL}>Empfänger</label>
-                  <input className="input" placeholder="z.B. Max Mustermann" value={newThreadName} onChange={e=>setNewThreadName(e.target.value)}/>
+                  {allUsers.length > 0 ? (
+                    <select className="input" value={newThreadName} onChange={e=>setNewThreadName(e.target.value)}>
+                      <option value="">Bitte wählen...</option>
+                      {allUsers.map(u => (
+                        <option key={u.id} value={u.name || u.email}>
+                          {u.name || u.email}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div style={{fontSize:13, color:B.midGrey}}>Keine Benutzer gefunden.</div>
+                  )}
                 </div>
             }
             <div style={{display:"flex",gap:10,marginTop:16}}>
