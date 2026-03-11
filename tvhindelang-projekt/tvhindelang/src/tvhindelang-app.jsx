@@ -1,11 +1,11 @@
 import { useState, useRef, useEffect } from "react";
-import { initializeApp } from "firebase/app";
+import { initializeApp, getApps, getApp } from "firebase/app";
 import {
   getFirestore, collection, doc, getDocs, addDoc, updateDoc, deleteDoc,
   onSnapshot, setDoc, serverTimestamp, query, orderBy
 } from "firebase/firestore";
 import {
-  getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged
+  getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword
 } from "firebase/auth";
 import {
   getStorage, ref, uploadBytes, getDownloadURL
@@ -21,10 +21,16 @@ const firebaseConfig = {
   messagingSenderId: "719897877586",
   appId: "1:719897877586:web:de42747cfe009aa2c7138b"
 };
-const firebaseApp = initializeApp(firebaseConfig);
+
+// Verhindert Fehler beim Neuladen (Hot Reloading) in React
+const firebaseApp = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 const db      = getFirestore(firebaseApp);
 const auth    = getAuth(firebaseApp);
 const storage = getStorage(firebaseApp);
+
+// "Secondary App" Trick: Erlaubt das Erstellen von Usern, ohne den aktuellen Admin auszuloggen
+const secondaryApp = getApps().find(a => a.name === "Secondary") || initializeApp(firebaseConfig, "Secondary");
+const secondaryAuth = getAuth(secondaryApp);
 
 // ─── BRAND ───────────────────────────────────────────────────
 const B = {
@@ -87,8 +93,8 @@ const Chip = ({ bg, c, border, children }) => (
 // ─── MAIN ────────────────────────────────────────────────────
 export default function TVHindelangApp() {
   // ── Auth state ──
-  const [user, setUser]           = useState(null);  // firebase user
-  const [userRole, setUserRole]   = useState(null);  // admin | player | youth | parent
+  const [user, setUser]           = useState(null);  
+  const [userRole, setUserRole]   = useState(null);  
   const [authLoading, setAuthLoading] = useState(true);
   const [showLogin, setShowLogin] = useState(false);
   const [loginEmail, setLoginEmail]   = useState("");
@@ -101,7 +107,7 @@ export default function TVHindelangApp() {
   const [teams, setTeams]     = useState(INIT_TEAMS);
   const [news, setNews]       = useState([]);
   const [threads, setThreads] = useState([]);
-  const [allUsers, setAllUsers] = useState([]); // Liste aller Benutzer
+  const [allUsers, setAllUsers] = useState([]); 
   const [introText, setIntroText] = useState(INIT_INTRO);
   const [dataLoaded, setDataLoaded] = useState(false);
 
@@ -132,10 +138,12 @@ export default function TVHindelangApp() {
   const [newThreadTeam, setNewThreadTeam]   = useState("Herren");
   const [newThreadName, setNewThreadName]   = useState("");
 
-  // NEU: User-Manager Modals
+  // User-Manager Modals
   const [showUserModal, setShowUserModal]   = useState(false);
   const [editingUser, setEditingUser]       = useState(null);
-  const [userForm, setUserForm]             = useState({ name: "", role: "player" });
+  const [userForm, setUserForm]             = useState({ name: "", email: "", password: "", role: "player" });
+  const [userSaving, setUserSaving]         = useState(false);
+  const [userError, setUserError]           = useState("");
 
   // ── Messages ──
   const [activeThread, setActiveThread] = useState(null);
@@ -175,32 +183,24 @@ export default function TVHindelangApp() {
     if (!user) return;
     const unsubs = [];
 
-    // events
     unsubs.push(onSnapshot(query(collection(db,"events"), orderBy("date")), snap => {
       setEvents(snap.docs.map(d=>({id:d.id,...d.data()})));
     }));
-    // teams
     unsubs.push(onSnapshot(collection(db,"teams"), snap => {
       if (!snap.empty) setTeams(snap.docs.map(d=>({id:d.id,...d.data()})));
     }));
-    // news
     unsubs.push(onSnapshot(query(collection(db,"news"), orderBy("date","desc")), snap => {
       setNews(snap.docs.map(d=>({id:d.id,...d.data()})));
     }));
-    // threads
     unsubs.push(onSnapshot(collection(db,"threads"), snap => {
       setThreads(snap.docs.map(d=>({id:d.id,...d.data(),messages:d.data().messages||[]})));
     }));
-    // all users 
     unsubs.push(onSnapshot(collection(db,"users"), 
       snap => {
         setAllUsers(snap.docs.map(d=>({id:d.id,...d.data()})));
       },
-      error => {
-        console.error("Firebase Fehler beim Laden der Benutzer:", error);
-      }
+      error => console.error("Firebase Fehler beim Laden der Benutzer:", error)
     ));
-    // intro text
     unsubs.push(onSnapshot(doc(db,"settings","intro"), snap => {
       if (snap.exists()) setIntroText(snap.data().text || INIT_INTRO);
     }));
@@ -246,11 +246,9 @@ export default function TVHindelangApp() {
     setNewsForm({title:n.title, body:n.body, fileUrl:n.fileUrl||"", fileName:n.fileName||"", fileObj:null}); 
     setShowNewsModal(true); 
   };
-  
   const saveNews = async () => {
     if (!newsForm.title || !newsForm.body) return;
     setNewsSaving(true);
-    
     let finalFileUrl = newsForm.fileUrl;
     let finalFileName = newsForm.fileName;
 
@@ -260,33 +258,15 @@ export default function TVHindelangApp() {
         await uploadBytes(fileRef, newsForm.fileObj);
         finalFileUrl = await getDownloadURL(fileRef);
         finalFileName = newsForm.fileObj.name;
-      } catch (err) {
-        console.error("Fehler beim Upload:", err);
-      }
+      } catch (err) { console.error("Fehler beim Upload:", err); }
     }
 
-    const newsData = {
-      title: newsForm.title,
-      body: newsForm.body,
-      fileUrl: finalFileUrl,
-      fileName: finalFileName
-    };
-
-    if (editingNews) {
-      await updateDoc(doc(db,"news",editingNews.id), newsData);
-    } else {
-      await addDoc(collection(db,"news"), {
-        ...newsData, 
-        date:todayStr, 
-        author: user?.email||"Admin", 
-        createdAt:serverTimestamp()
-      });
-    }
+    const newsData = { title: newsForm.title, body: newsForm.body, fileUrl: finalFileUrl, fileName: finalFileName };
+    if (editingNews) await updateDoc(doc(db,"news",editingNews.id), newsData);
+    else await addDoc(collection(db,"news"), { ...newsData, date:todayStr, author: user?.email||"Admin", createdAt:serverTimestamp() });
     
-    setNewsSaving(false);
-    setShowNewsModal(false);
+    setNewsSaving(false); setShowNewsModal(false);
   };
-  
   const deleteNews = async (id) => { await deleteDoc(doc(db,"news",id)); };
 
   // ── Team CRUD ────────────────────────────────────────────
@@ -301,25 +281,66 @@ export default function TVHindelangApp() {
   const deleteTeam = async (id) => { await deleteDoc(doc(db,"teams",id)); };
 
   // ── User CRUD ────────────────────────────────────────────
-  const openEditUser = (u) => {
-    setEditingUser(u);
-    setUserForm({ name: u.name || "", role: u.role || "player" });
+  const openAddUser = () => {
+    setEditingUser(null);
+    setUserError("");
+    setUserForm({ name: "", email: "", password: "", role: "player" });
     setShowUserModal(true);
   };
+  
+  const openEditUser = (u) => {
+    setEditingUser(u);
+    setUserError("");
+    setUserForm({ name: u.name || "", email: u.email || "", password: "", role: u.role || "player" });
+    setShowUserModal(true);
+  };
+
   const saveUser = async () => {
-    if (!editingUser) return;
-    // SetDoc mit merge:true oder updateDoc stellen sicher, dass wir nur updaten
-    await updateDoc(doc(db, "users", editingUser.id), {
-      name: userForm.name,
-      role: userForm.role
-    });
-    setShowUserModal(false);
+    setUserError("");
+    setUserSaving(true);
+    
+    try {
+      if (editingUser) {
+        // Bearbeiten: Wir updaten nur Name und Rolle in der Firestore Datenbank
+        await updateDoc(doc(db, "users", editingUser.id), {
+          name: userForm.name,
+          role: userForm.role
+        });
+      } else {
+        // Neu anlegen: Auth Account in der Secondary App erstellen!
+        if (!userForm.email || !userForm.password) {
+          setUserError("E-Mail und Passwort sind Pflichtfelder für neue Nutzer.");
+          setUserSaving(false);
+          return;
+        }
+        
+        const userCredential = await createUserWithEmailAndPassword(secondaryAuth, userForm.email, userForm.password);
+        const newUid = userCredential.user.uid;
+        
+        // Danach speichern wir Name und Rolle in die Datenbank
+        await setDoc(doc(db, "users", newUid), {
+          email: userForm.email,
+          name: userForm.name,
+          role: userForm.role,
+          createdAt: serverTimestamp()
+        });
+
+        // Zweit-Account wieder ausloggen, damit alles sauber bleibt
+        await signOut(secondaryAuth);
+      }
+      setShowUserModal(false);
+    } catch (err) {
+      console.error(err);
+      if (err.code === 'auth/email-already-in-use') setUserError("Diese E-Mail ist bereits registriert.");
+      else if (err.code === 'auth/weak-password') setUserError("Das Passwort muss mindestens 6 Zeichen lang sein.");
+      else setUserError("Fehler: " + err.message);
+    }
+    
+    setUserSaving(false);
   };
 
   // ── Intro text ───────────────────────────────────────────
-  const saveIntro = async (text) => {
-    await setDoc(doc(db,"settings","intro"), { text });
-  };
+  const saveIntro = async (text) => { await setDoc(doc(db,"settings","intro"), { text }); };
 
   // ── Messages ─────────────────────────────────────────────
   const sendMessage = async () => {
@@ -814,7 +835,6 @@ export default function TVHindelangApp() {
               </div>
             </div>
             <div style={{display:"flex",borderBottom:`1.5px solid ${B.lightGrey}`,marginBottom:24,marginTop:16,background:B.white,borderRadius:"8px 8px 0 0",overflow:"hidden"}}>
-              {/* NEUER TAB FÜR BENUTZER HINZUGEFÜGT */}
               {[["teams","👥 Mannschaften"],["events","📅 Termine"],["news","📢 News"],["users", "👤 Benutzer"],["intro","🏠 Starttext"]].map(([id,label])=>(
                 <button key={id} className={`admin-tab ${adminSection===id?"active":""}`} onClick={()=>setAdminSection(id)}>{label}</button>
               ))}
@@ -909,11 +929,12 @@ export default function TVHindelangApp() {
               </div>
             )}
 
-            {/* NEU: Benutzerverwaltung Content */}
+            {/* Benutzerverwaltung Content */}
             {adminSection==="users"&&(
               <div>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
                   <div style={{fontSize:16,fontWeight:800,letterSpacing:1,textTransform:"uppercase"}}>Benutzer ({allUsers.length})</div>
+                  <button className="btn btn-primary" onClick={openAddUser}>+ Neuen Nutzer anlegen</button>
                 </div>
                 <div style={{display:"flex",flexDirection:"column",gap:8}}>
                   {allUsers.map(u=>(
@@ -1098,8 +1119,24 @@ export default function TVHindelangApp() {
         <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&setShowUserModal(false)}>
           <div className="modal" style={{maxWidth:420}}>
             <div style={{height:4,background:`linear-gradient(90deg,${B.amber},${B.teal})`,borderRadius:"4px 4px 0 0",margin:"-30px -30px 22px"}}/>
-            <h2 style={{fontSize:22,fontWeight:900,letterSpacing:1,textTransform:"uppercase",marginBottom:20}}>Benutzer bearbeiten</h2>
+            <h2 style={{fontSize:22,fontWeight:900,letterSpacing:1,textTransform:"uppercase",marginBottom:20}}>
+              {editingUser ? "Benutzer bearbeiten" : "Neuen Benutzer anlegen"}
+            </h2>
             <div style={{display:"flex",flexDirection:"column",gap:13}}>
+              
+              {!editingUser && (
+                <>
+                  <div>
+                    <label style={LBL}>E-Mail *</label>
+                    <input className="input" type="email" placeholder="spieler@email.de" value={userForm.email} onChange={e=>setUserForm({...userForm,email:e.target.value})}/>
+                  </div>
+                  <div>
+                    <label style={LBL}>Passwort *</label>
+                    <input className="input" type="password" placeholder="Mindestens 6 Zeichen" value={userForm.password} onChange={e=>setUserForm({...userForm,password:e.target.value})}/>
+                  </div>
+                </>
+              )}
+
               <div>
                 <label style={LBL}>Anzeigename</label>
                 <input className="input" placeholder="z.B. Max Mustermann" value={userForm.name} onChange={e=>setUserForm({...userForm,name:e.target.value})}/>
@@ -1111,9 +1148,14 @@ export default function TVHindelangApp() {
                   <option value="admin">Administrator</option>
                 </select>
               </div>
+
+              {userError && <div style={{color:B.red,fontSize:13,fontFamily:"'Barlow',sans-serif",marginTop:4}}>❌ {userError}</div>}
+
               <div style={{display:"flex",gap:10,marginTop:12}}>
-                <button className="btn btn-ghost" style={{flex:1}} onClick={()=>setShowUserModal(false)}>Abbrechen</button>
-                <button className="btn btn-primary" style={{flex:2}} onClick={saveUser}>✓ Speichern</button>
+                <button className="btn btn-ghost" style={{flex:1}} onClick={()=>setShowUserModal(false)} disabled={userSaving}>Abbrechen</button>
+                <button className="btn btn-primary" style={{flex:2}} onClick={saveUser} disabled={userSaving || (!editingUser && (!userForm.email || !userForm.password))}>
+                  {userSaving ? "Speichert..." : "✓ Speichern"}
+                </button>
               </div>
             </div>
           </div>
