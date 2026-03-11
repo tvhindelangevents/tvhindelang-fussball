@@ -150,7 +150,13 @@ export default function TVHindelangApp() {
   const [chatInput, setChatInput]       = useState("");
   const chatEndRef = useRef(null);
 
+  // ── ROLES & PERMISSIONS ──
   const isAdmin = userRole === "admin";
+  const isTrainer = userRole === "trainer";
+  const canAccessAdmin = isAdmin || isTrainer; // Beide dürfen den Admin-Bereich betreten
+  const canEditEvents = isAdmin || isTrainer;  // Termine anlegen/bearbeiten/löschen
+  const canEditNews = isAdmin || isTrainer;    // News anlegen/bearbeiten/löschen
+
   const year  = currentDate.getFullYear();
   const month = currentDate.getMonth();
   const startOffset = (() => { const d=new Date(year,month,1).getDay(); return d===0?6:d-1; })();
@@ -301,31 +307,25 @@ export default function TVHindelangApp() {
     
     try {
       if (editingUser) {
-        // Bearbeiten: Wir updaten nur Name und Rolle in der Firestore Datenbank
         await updateDoc(doc(db, "users", editingUser.id), {
           name: userForm.name,
           role: userForm.role
         });
       } else {
-        // Neu anlegen: Auth Account in der Secondary App erstellen!
         if (!userForm.email || !userForm.password) {
           setUserError("E-Mail und Passwort sind Pflichtfelder für neue Nutzer.");
           setUserSaving(false);
           return;
         }
-        
         const userCredential = await createUserWithEmailAndPassword(secondaryAuth, userForm.email, userForm.password);
         const newUid = userCredential.user.uid;
         
-        // Danach speichern wir Name und Rolle in die Datenbank
         await setDoc(doc(db, "users", newUid), {
           email: userForm.email,
           name: userForm.name,
           role: userForm.role,
           createdAt: serverTimestamp()
         });
-
-        // Zweit-Account wieder ausloggen, damit alles sauber bleibt
         await signOut(secondaryAuth);
       }
       setShowUserModal(false);
@@ -345,7 +345,7 @@ export default function TVHindelangApp() {
   // ── Messages ─────────────────────────────────────────────
   const sendMessage = async () => {
     if (!chatInput.trim()||!activeThread) return;
-    const msg = { from: user?.email||"Admin", text:chatInput, time: new Date().toLocaleTimeString("de",{hour:"2-digit",minute:"2-digit"}) };
+    const msg = { from: user?.email||"Benutzer", text:chatInput, time: new Date().toLocaleTimeString("de",{hour:"2-digit",minute:"2-digit"}) };
     const updated = [...(activeThread.messages||[]), msg];
     await updateDoc(doc(db,"threads",activeThread.id), { messages: updated });
     setActiveThread({...activeThread, messages: updated});
@@ -394,7 +394,7 @@ export default function TVHindelangApp() {
             {ev.location&&<div style={{fontSize:12,color:B.midGrey,marginTop:1}}>📍 {ev.location}</div>}
             {ev.notes&&<div style={{fontSize:12,color:B.charcoal,marginTop:4,fontStyle:"italic",fontFamily:"'Barlow',sans-serif"}}>{ev.notes}</div>}
           </div>
-          {isAdmin&&controls&&(
+          {canEditEvents&&controls&&(
             <div style={{display:"flex",flexDirection:"column",gap:4,flexShrink:0}}>
               <button className="btn btn-edit" onClick={()=>openEditEvent(ev)}>✏️</button>
               <button className="btn btn-danger" onClick={()=>deleteEvent(ev.id)}>🗑️</button>
@@ -403,6 +403,17 @@ export default function TVHindelangApp() {
         </div>
       </div>
     );
+  };
+
+  // ── Helper für Admin Tabs ──
+  const getAdminTabs = () => {
+    const tabs = [];
+    if (isAdmin) tabs.push({ id: "teams", label: "👥 Mannschaften" });
+    if (isAdmin || isTrainer) tabs.push({ id: "events", label: "📅 Termine" });
+    if (isAdmin || isTrainer) tabs.push({ id: "news", label: "📢 News" });
+    if (isAdmin) tabs.push({ id: "users", label: "👤 Benutzer" });
+    if (isAdmin) tabs.push({ id: "intro", label: "🏠 Starttext" });
+    return tabs;
   };
 
   // ── Loading / Auth screens ────────────────────────────────
@@ -500,8 +511,11 @@ export default function TVHindelangApp() {
             </button>
           ))}
           <div style={{width:1,height:28,background:B.lightGrey,margin:"0 8px"}}/>
-          {isAdmin&&(
-            <button className={`nav-btn ${view==="admin"?"active":""}`} style={{color:B.amber}} onClick={()=>setView("admin")}>⚙️ Admin</button>
+          {canAccessAdmin&&(
+            <button className={`nav-btn ${view==="admin"?"active":""}`} style={{color:B.amber}} onClick={()=>{
+              setView("admin");
+              if(isTrainer && !isAdmin && adminSection !== "events" && adminSection !== "news") setAdminSection("events");
+            }}>⚙️ Admin</button>
           )}
           <button className="btn btn-ghost" style={{fontSize:11,padding:"5px 10px",marginLeft:4}} onClick={handleLogout}>Abmelden</button>
         </nav>
@@ -592,7 +606,7 @@ export default function TVHindelangApp() {
               <div className="tile" style={{cursor:"default"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                   <span style={{fontSize:13,fontWeight:800,letterSpacing:1.5,textTransform:"uppercase",color:B.amber}}>📢 News</span>
-                  {isAdmin&&<button className="btn btn-primary" style={{padding:"5px 12px",fontSize:11}} onClick={e=>{e.stopPropagation();openAddNews();}}>+ News</button>}
+                  {canEditNews&&<button className="btn btn-primary" style={{padding:"5px 12px",fontSize:11}} onClick={e=>{e.stopPropagation();openAddNews();}}>+ News</button>}
                 </div>
                 {news.slice(0,2).map(n=>(
                   <div key={n.id} style={{padding:"10px 12px",background:B.amberLight,borderRadius:8,borderLeft:`3px solid ${B.amber}`}}>
@@ -620,7 +634,7 @@ export default function TVHindelangApp() {
                 <div style={{display:"flex",gap:8}}>
                   <button className="btn btn-ghost" onClick={()=>setCurrentDate(new Date(year,month-1,1))}>◀</button>
                   <button className="btn btn-ghost" onClick={()=>setCurrentDate(new Date(year,month+1,1))}>▶</button>
-                  {isAdmin&&<button className="btn btn-primary" onClick={()=>openAddEvent()}>+ Termin</button>}
+                  {canEditEvents&&<button className="btn btn-primary" onClick={()=>openAddEvent()}>+ Termin</button>}
                 </div>
               </div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:5,marginBottom:5}}>
@@ -657,7 +671,7 @@ export default function TVHindelangApp() {
                     ? <div style={{textAlign:"center",color:B.midGrey,padding:"24px 0",fontSize:14,fontFamily:"'Barlow',sans-serif"}}>Keine Termine an diesem Tag</div>
                     : selectedEvs.map(ev=><EventCard key={ev.id} ev={ev}/>)
                   }
-                  {isAdmin&&<button className="btn btn-primary" style={{width:"100%",marginTop:8}} onClick={()=>openAddEvent(selectedStr)}>+ Termin hinzufügen</button>}
+                  {canEditEvents&&<button className="btn btn-primary" style={{width:"100%",marginTop:8}} onClick={()=>openAddEvent(selectedStr)}>+ Termin hinzufügen</button>}
                 </>
               ) : (
                 <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:220,color:B.midGrey,gap:10}}>
@@ -674,7 +688,7 @@ export default function TVHindelangApp() {
           <div style={{maxWidth:920,margin:"0 auto"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:22}}>
               <h1 style={{fontSize:30,fontWeight:900,letterSpacing:2,textTransform:"uppercase"}}>Spielplan & <span style={{color:B.teal}}>Termine</span></h1>
-              {isAdmin&&<button className="btn btn-primary" onClick={()=>openAddEvent()}>+ Neuer Termin</button>}
+              {canEditEvents&&<button className="btn btn-primary" onClick={()=>openAddEvent()}>+ Neuer Termin</button>}
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:10}}>
               {upcoming.length===0
@@ -701,7 +715,7 @@ export default function TVHindelangApp() {
                           <div style={{color:B.midGrey,fontSize:12}}>⏰ {ev.time} {ev.endTime ? `- ${ev.endTime}` : ""} Uhr · 📍 {ev.location}</div>
                           {ev.notes&&<div style={{fontSize:12,color:B.charcoal,marginTop:2,fontStyle:"italic",fontFamily:"'Barlow',sans-serif"}}>{ev.notes}</div>}
                         </div>
-                        {isAdmin&&<div style={{display:"flex",gap:6}}><button className="btn btn-edit" onClick={()=>openEditEvent(ev)}>✏️</button><button className="btn btn-danger" onClick={()=>deleteEvent(ev.id)}>🗑️</button></div>}
+                        {canEditEvents&&<div style={{display:"flex",gap:6}}><button className="btn btn-edit" onClick={()=>openEditEvent(ev)}>✏️</button><button className="btn btn-danger" onClick={()=>deleteEvent(ev.id)}>🗑️</button></div>}
                       </div>
                     );
                   })
@@ -758,7 +772,7 @@ export default function TVHindelangApp() {
           </div>
         )}
 
-        {/* ════ MESSAGES ════ */}
+        {/* ════ MESSAGES (FÜR ALLE) ════ */}
         {view==="messages"&&(
           <div style={{maxWidth:1100,margin:"0 auto",display:"grid",gridTemplateColumns:"270px 1fr",background:B.white,borderRadius:12,border:`1.5px solid ${B.lightGrey}`,overflow:"hidden",boxShadow:"0 4px 24px rgba(0,0,0,.07)",height:"calc(100vh - 160px)",minHeight:500}}>
             <div style={{borderRight:`1.5px solid ${B.lightGrey}`,display:"flex",flexDirection:"column",background:B.offWhite}}>
@@ -781,9 +795,10 @@ export default function TVHindelangApp() {
                   );
                 })}
               </div>
-              {isAdmin&&<div style={{padding:"12px 14px",borderTop:`1.5px solid ${B.lightGrey}`,background:B.white,flexShrink:0}}>
+              {/* ALLE dürfen jetzt neue Chats anlegen */}
+              <div style={{padding:"12px 14px",borderTop:`1.5px solid ${B.lightGrey}`,background:B.white,flexShrink:0}}>
                 <button className="btn btn-primary" style={{width:"100%",fontSize:12,padding:9}} onClick={()=>setShowNewThread(true)}>+ Neuer Chat</button>
-              </div>}
+              </div>
             </div>
             {activeThread ? (
               <div style={{display:"flex",flexDirection:"column",height:"100%"}}>
@@ -824,23 +839,26 @@ export default function TVHindelangApp() {
           </div>
         )}
 
-        {/* ════ ADMIN ════ */}
-        {view==="admin"&&isAdmin&&(
+        {/* ════ ADMIN / TRAINER ════ */}
+        {view==="admin"&&canAccessAdmin&&(
           <div style={{maxWidth:1040,margin:"0 auto"}}>
             <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:6}}>
-              <div style={{width:40,height:40,borderRadius:10,background:B.amberLight,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22}}>⚙️</div>
+              <div style={{width:40,height:40,borderRadius:10,background:isAdmin?B.amberLight:B.tealLight,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22}}>⚙️</div>
               <div>
-                <h1 style={{fontSize:28,fontWeight:900,letterSpacing:2,textTransform:"uppercase",color:B.amber}}>Admin-Bereich</h1>
+                <h1 style={{fontSize:28,fontWeight:900,letterSpacing:2,textTransform:"uppercase",color:isAdmin?B.amber:B.teal}}>
+                  {isAdmin ? "Admin-Bereich" : "Trainer-Bereich"}
+                </h1>
                 <div style={{fontSize:12,color:B.midGrey}}>Eingeloggt als: {user?.email}</div>
               </div>
             </div>
-            <div style={{display:"flex",borderBottom:`1.5px solid ${B.lightGrey}`,marginBottom:24,marginTop:16,background:B.white,borderRadius:"8px 8px 0 0",overflow:"hidden"}}>
-              {[["teams","👥 Mannschaften"],["events","📅 Termine"],["news","📢 News"],["users", "👤 Benutzer"],["intro","🏠 Starttext"]].map(([id,label])=>(
-                <button key={id} className={`admin-tab ${adminSection===id?"active":""}`} onClick={()=>setAdminSection(id)}>{label}</button>
+            
+            <div style={{display:"flex",borderBottom:`1.5px solid ${B.lightGrey}`,marginBottom:24,marginTop:16,background:B.white,borderRadius:"8px 8px 0 0",overflow:"hidden",flexWrap:"wrap"}}>
+              {getAdminTabs().map(tab=>(
+                <button key={tab.id} className={`admin-tab ${adminSection===tab.id?"active":""}`} onClick={()=>setAdminSection(tab.id)}>{tab.label}</button>
               ))}
             </div>
 
-            {adminSection==="teams"&&(
+            {adminSection==="teams"&&isAdmin&&(
               <div>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
                   <div style={{fontSize:16,fontWeight:800,letterSpacing:1,textTransform:"uppercase"}}>Mannschaften ({teams.length})</div>
@@ -863,7 +881,7 @@ export default function TVHindelangApp() {
               </div>
             )}
 
-            {adminSection==="events"&&(
+            {adminSection==="events"&&canEditEvents&&(
               <div>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
                   <div style={{fontSize:16,fontWeight:800,letterSpacing:1,textTransform:"uppercase"}}>Termine ({events.length})</div>
@@ -898,7 +916,7 @@ export default function TVHindelangApp() {
               </div>
             )}
 
-            {adminSection==="news"&&(
+            {adminSection==="news"&&canEditNews&&(
               <div>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
                   <div style={{fontSize:16,fontWeight:800,letterSpacing:1,textTransform:"uppercase"}}>News ({news.length})</div>
@@ -930,32 +948,46 @@ export default function TVHindelangApp() {
             )}
 
             {/* Benutzerverwaltung Content */}
-            {adminSection==="users"&&(
+            {adminSection==="users"&&isAdmin&&(
               <div>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
                   <div style={{fontSize:16,fontWeight:800,letterSpacing:1,textTransform:"uppercase"}}>Benutzer ({allUsers.length})</div>
                   <button className="btn btn-primary" onClick={openAddUser}>+ Neuen Nutzer anlegen</button>
                 </div>
                 <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                  {allUsers.map(u=>(
-                    <div key={u.id} className="card" style={{display:"grid",gridTemplateColumns:"1fr 1fr 120px auto",gap:16,alignItems:"center",padding:"14px 18px"}}>
-                      <div style={{fontWeight:800,fontSize:16}}>{u.name || <span style={{color:B.midGrey,fontStyle:"italic"}}>Kein Name vergeben</span>}</div>
-                      <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif"}}>✉️ {u.email || u.id}</div>
-                      <div>
-                        <Chip bg={u.role==="admin"?B.amberLight:B.tealLight} c={u.role==="admin"?B.amber:B.teal}>
-                          {u.role==="admin"?"Admin":"Spieler"}
-                        </Chip>
+                  {allUsers.map(u=>{
+                    const getRoleLabel = (r) => {
+                      if(r==="admin") return "Admin";
+                      if(r==="trainer") return "Trainer";
+                      if(r==="parent") return "Eltern";
+                      return "Aktiv";
+                    };
+                    const getRoleColor = (r) => {
+                      if(r==="admin") return { bg: B.amberLight, c: B.amber };
+                      if(r==="trainer") return { bg: B.tealLight, c: B.teal };
+                      if(r==="parent") return { bg: B.offWhite, c: B.midGrey };
+                      return { bg: B.greenLight, c: B.green };
+                    };
+                    const rc = getRoleColor(u.role);
+                    
+                    return (
+                      <div key={u.id} className="card" style={{display:"grid",gridTemplateColumns:"1fr 1fr 100px auto",gap:16,alignItems:"center",padding:"14px 18px"}}>
+                        <div style={{fontWeight:800,fontSize:16}}>{u.name || <span style={{color:B.midGrey,fontStyle:"italic"}}>Kein Name vergeben</span>}</div>
+                        <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif"}}>✉️ {u.email || u.id}</div>
+                        <div>
+                          <Chip bg={rc.bg} c={rc.c}>{getRoleLabel(u.role)}</Chip>
+                        </div>
+                        <div style={{display:"flex",gap:6}}>
+                          <button className="btn btn-edit" onClick={()=>openEditUser(u)}>✏️ Bearbeiten</button>
+                        </div>
                       </div>
-                      <div style={{display:"flex",gap:6}}>
-                        <button className="btn btn-edit" onClick={()=>openEditUser(u)}>✏️ Bearbeiten</button>
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
             )}
 
-            {adminSection==="intro"&&(
+            {adminSection==="intro"&&isAdmin&&(
               <div style={{maxWidth:640}}>
                 <div style={{fontSize:16,fontWeight:800,letterSpacing:1,textTransform:"uppercase",marginBottom:16}}>Vorstellungstext Startseite</div>
                 <div className="card" style={{padding:24}}>
@@ -1114,7 +1146,7 @@ export default function TVHindelangApp() {
         </div>
       )}
 
-      {/* ════ USER MODAL (NEU) ════ */}
+      {/* ════ USER MODAL ════ */}
       {showUserModal&&(
         <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&setShowUserModal(false)}>
           <div className="modal" style={{maxWidth:420}}>
@@ -1144,8 +1176,10 @@ export default function TVHindelangApp() {
               <div>
                 <label style={LBL}>Rolle</label>
                 <select className="input" value={userForm.role} onChange={e=>setUserForm({...userForm,role:e.target.value})}>
-                  <option value="player">Spieler / Normal</option>
                   <option value="admin">Administrator</option>
+                  <option value="trainer">Trainer</option>
+                  <option value="player">Aktiv (Spieler:in)</option>
+                  <option value="parent">Eltern</option>
                 </select>
               </div>
 
