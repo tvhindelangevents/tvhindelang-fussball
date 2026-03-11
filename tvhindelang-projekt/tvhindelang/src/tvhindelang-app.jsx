@@ -1,0 +1,990 @@
+import { useState, useRef, useEffect } from "react";
+import { initializeApp } from "firebase/app";
+import {
+  getFirestore, collection, doc, getDocs, addDoc, updateDoc, deleteDoc,
+  onSnapshot, setDoc, serverTimestamp, query, orderBy
+} from "firebase/firestore";
+import {
+  getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged
+} from "firebase/auth";
+
+// ─── FIREBASE ────────────────────────────────────────────────
+const firebaseConfig = {
+  apiKey: "AIzaSyDbnMVzNieyZkke6PQ9LzBqQna9SlZU4Dg",
+  authDomain: "tvhindelang-fussball.firebaseapp.com",
+  databaseURL: "https://tvhindelang-fussball-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "tvhindelang-fussball",
+  storageBucket: "tvhindelang-fussball.firebasestorage.app",
+  messagingSenderId: "719897877586",
+  appId: "1:719897877586:web:de42747cfe009aa2c7138b"
+};
+const firebaseApp = initializeApp(firebaseConfig);
+const db   = getFirestore(firebaseApp);
+const auth = getAuth(firebaseApp);
+
+// ─── BRAND ───────────────────────────────────────────────────
+const B = {
+  teal:"#29B8C8", tealDark:"#1E96A4", tealLight:"#E8F7F9", tealMid:"#B8E8ED",
+  anthracite:"#1C1C1C", charcoal:"#2E3A3D", midGrey:"#8A9BA0",
+  lightGrey:"#E2EAEC", offWhite:"#F4F7F8", white:"#FFFFFF",
+  red:"#E03E3E", redLight:"#FDEAEA",
+  amber:"#E07A2A", amberLight:"#FEF3E8",
+  green:"#2EAA6E", greenLight:"#E6F7F0",
+};
+const BUS = { color:"#7C3AED", bg:"#F3EFFE", border:"#C4B5FD" };
+
+const EVENT_TYPES = [
+  { value:"training", label:"Training",    color:B.teal,    bg:B.tealLight  },
+  { value:"game",     label:"Spiel",       color:B.red,     bg:B.redLight   },
+  { value:"meeting",  label:"Versammlung", color:B.amber,   bg:B.amberLight },
+  { value:"other",    label:"Sonstiges",   color:B.midGrey, bg:B.offWhite   },
+];
+const DAYS   = ["Mo","Di","Mi","Do","Fr","Sa","So"];
+const MONTHS = ["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
+const typeOf = (v) => EVENT_TYPES.find(t=>t.value===v)||EVENT_TYPES[3];
+
+const INIT_TEAMS = [
+  { id:"ah",    name:"AH",         trainer:"N.N.", training:"Freitag 19:30 Uhr",  jahrgang:"Ü32"       },
+  { id:"herren",name:"Herren",     trainer:"N.N.", training:"Di & Do 19:00 Uhr",  jahrgang:"Senioren"  },
+  { id:"a",     name:"A-Jugend",   trainer:"N.N.", training:"Di & Do 17:30 Uhr",  jahrgang:"2007/2008" },
+  { id:"b1",    name:"B-Jugend 1", trainer:"N.N.", training:"Mo & Mi 17:00 Uhr",  jahrgang:"2009/2010" },
+  { id:"b2",    name:"B-Jugend 2", trainer:"N.N.", training:"Mo & Mi 17:00 Uhr",  jahrgang:"2009/2010" },
+  { id:"c1",    name:"C1",         trainer:"N.N.", training:"Di & Do 16:30 Uhr",  jahrgang:"2011/2012" },
+  { id:"c2",    name:"C2",         trainer:"N.N.", training:"Di & Do 16:30 Uhr",  jahrgang:"2011/2012" },
+  { id:"d1",    name:"D1",         trainer:"N.N.", training:"Mi 16:00 Uhr",       jahrgang:"2013/2014" },
+  { id:"d2",    name:"D2",         trainer:"N.N.", training:"Mi 16:00 Uhr",       jahrgang:"2013/2014" },
+  { id:"e1",    name:"E1",         trainer:"N.N.", training:"Di 15:30 Uhr",       jahrgang:"2015/2016" },
+  { id:"e2",    name:"E2",         trainer:"N.N.", training:"Di 15:30 Uhr",       jahrgang:"2015/2016" },
+  { id:"e3",    name:"E3",         trainer:"N.N.", training:"Di 15:30 Uhr",       jahrgang:"2015/2016" },
+  { id:"f1",    name:"F1",         trainer:"N.N.", training:"Sa 10:00 Uhr",       jahrgang:"2017/2018" },
+  { id:"f2",    name:"F2",         trainer:"N.N.", training:"Sa 10:00 Uhr",       jahrgang:"2017/2018" },
+  { id:"f3",    name:"F3",         trainer:"N.N.", training:"Sa 10:00 Uhr",       jahrgang:"2017/2018" },
+  { id:"bam",   name:"Bambini",    trainer:"N.N.", training:"Sa 09:00 Uhr",       jahrgang:"2019+"     },
+];
+
+const INIT_INTRO = "Die Fußballabteilung des TV Hindelang e.V. vereint 16 aktive Mannschaften – von den Bambini bis zu den Senioren und der Alten Herren. Hier findet ihr alle Termine, Spielpläne, Mannschaftsinfos und Vereinsnews an einem Ort.";
+
+const emptyEvent = (date="") => ({ type:"training", title:"", date, time:"17:00", location:"", notes:"", team:"Herren", bus1:false, bus2:false });
+
+const LBL = { fontSize:11, fontWeight:700, letterSpacing:1, color:B.midGrey, textTransform:"uppercase", display:"block", marginBottom:5 };
+
+const PineLogo = ({ size=36 }) => (
+  <svg width={size} height={size*1.1} viewBox="0 0 80 88" fill="none">
+    <path d="M40 4 L76 28 L64 84 L16 84 L4 28 Z" fill={B.teal}/>
+    <path d="M40 18 L32 34 H36 L29 48 H34 L25 64 H55 L46 48 H51 L44 34 H48 Z" fill="white"/>
+    <rect x="36" y="64" width="8" height="8" fill="white"/>
+  </svg>
+);
+
+const Chip = ({ bg, c, border, children }) => (
+  <span style={{display:"inline-block",padding:"2px 9px",borderRadius:20,fontSize:11,fontWeight:700,letterSpacing:.8,textTransform:"uppercase",background:bg,color:c,border:border||"none"}}>{children}</span>
+);
+
+// ─── MAIN ────────────────────────────────────────────────────
+export default function TVHindelangApp() {
+  // ── Auth state ──
+  const [user, setUser]           = useState(null);  // firebase user
+  const [userRole, setUserRole]   = useState(null);  // admin | player | youth | parent
+  const [authLoading, setAuthLoading] = useState(true);
+  const [showLogin, setShowLogin] = useState(false);
+  const [loginEmail, setLoginEmail]   = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginError, setLoginError]   = useState("");
+  const [loginLoading, setLoginLoading] = useState(false);
+
+  // ── Data from Firestore ──
+  const [events, setEvents]   = useState([]);
+  const [teams, setTeams]     = useState(INIT_TEAMS);
+  const [news, setNews]       = useState([]);
+  const [threads, setThreads] = useState([]);
+  const [introText, setIntroText] = useState(INIT_INTRO);
+  const [dataLoaded, setDataLoaded] = useState(false);
+
+  // ── UI state ──
+  const [view, setView]             = useState("home");
+  const [filterTeam, setFilterTeam] = useState("Alle Mannschaften");
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [selectedDay, setSelectedDay] = useState(null);
+  const [selectedTeam, setSelectedTeam] = useState(null);
+  const [adminSection, setAdminSection] = useState("teams");
+
+  // ── Modals ──
+  const [showEventModal, setShowEventModal] = useState(false);
+  const [editingEvent, setEditingEvent]     = useState(null);
+  const [eventForm, setEventForm]           = useState(emptyEvent());
+  const [showNewsModal, setShowNewsModal]   = useState(false);
+  const [editingNews, setEditingNews]       = useState(null);
+  const [newsForm, setNewsForm]             = useState({ title:"", body:"" });
+  const [showTeamModal, setShowTeamModal]   = useState(false);
+  const [editingTeam, setEditingTeam]       = useState(null);
+  const [teamForm, setTeamForm]             = useState({ name:"", trainer:"", training:"", jahrgang:"" });
+  const [showNewThread, setShowNewThread]   = useState(false);
+  const [newThreadType, setNewThreadType]   = useState("group");
+  const [newThreadTeam, setNewThreadTeam]   = useState("Herren");
+  const [newThreadName, setNewThreadName]   = useState("");
+
+  // ── Messages ──
+  const [activeThread, setActiveThread] = useState(null);
+  const [chatInput, setChatInput]       = useState("");
+  const chatEndRef = useRef(null);
+
+  const isAdmin = userRole === "admin";
+  const year  = currentDate.getFullYear();
+  const month = currentDate.getMonth();
+  const startOffset = (() => { const d=new Date(year,month,1).getDay(); return d===0?6:d-1; })();
+  const daysInMonth = new Date(year,month+1,0).getDate();
+  const todayStr = new Date().toISOString().slice(0,10);
+  const teamNames = ["Alle Mannschaften", ...teams.map(t=>t.name)];
+
+  // ── Auth listener ────────────────────────────────────────
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        setUser(firebaseUser);
+        // load role from Firestore
+        try {
+          const { getDoc, doc: docRef } = await import("firebase/firestore");
+          const snap = await getDoc(docRef(db, "users", firebaseUser.uid));
+          if (snap.exists()) setUserRole(snap.data().role || "player");
+          else setUserRole("player");
+        } catch { setUserRole("player"); }
+      } else {
+        setUser(null);
+        setUserRole(null);
+      }
+      setAuthLoading(false);
+    });
+    return unsub;
+  }, []);
+
+  // ── Firestore listeners ──────────────────────────────────
+  useEffect(() => {
+    if (!user) return;
+    const unsubs = [];
+
+    // events
+    unsubs.push(onSnapshot(query(collection(db,"events"), orderBy("date")), snap => {
+      setEvents(snap.docs.map(d=>({id:d.id,...d.data()})));
+    }));
+    // teams
+    unsubs.push(onSnapshot(collection(db,"teams"), snap => {
+      if (!snap.empty) setTeams(snap.docs.map(d=>({id:d.id,...d.data()})));
+    }));
+    // news
+    unsubs.push(onSnapshot(query(collection(db,"news"), orderBy("date","desc")), snap => {
+      setNews(snap.docs.map(d=>({id:d.id,...d.data()})));
+    }));
+    // threads
+    unsubs.push(onSnapshot(collection(db,"threads"), snap => {
+      setThreads(snap.docs.map(d=>({id:d.id,...d.data(),messages:d.data().messages||[]})));
+    }));
+    // intro text
+    unsubs.push(onSnapshot(doc(db,"settings","intro"), snap => {
+      if (snap.exists()) setIntroText(snap.data().text || INIT_INTRO);
+    }));
+
+    setDataLoaded(true);
+    return () => unsubs.forEach(u=>u());
+  }, [user]);
+
+  useEffect(() => { chatEndRef.current?.scrollIntoView({behavior:"smooth"}); }, [activeThread]);
+
+  // ── Auth actions ─────────────────────────────────────────
+  const handleLogin = async () => {
+    setLoginLoading(true); setLoginError("");
+    try {
+      await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
+      setShowLogin(false); setLoginEmail(""); setLoginPassword("");
+    } catch (e) {
+      setLoginError("Falsche E-Mail oder falsches Passwort.");
+    }
+    setLoginLoading(false);
+  };
+  const handleLogout = async () => { await signOut(auth); setView("home"); };
+
+  // ── Event CRUD ───────────────────────────────────────────
+  const openAddEvent = (date="") => { setEditingEvent(null); setEventForm(emptyEvent(date)); setShowEventModal(true); };
+  const openEditEvent = (ev) => { setEditingEvent(ev); setEventForm({type:ev.type,title:ev.title,date:ev.date,time:ev.time,location:ev.location||"",notes:ev.notes||"",team:ev.team||"Herren",bus1:ev.bus1||false,bus2:ev.bus2||false}); setShowEventModal(true); };
+  const saveEvent = async () => {
+    if (!eventForm.title||!eventForm.date) return;
+    if (editingEvent) await updateDoc(doc(db,"events",editingEvent.id), eventForm);
+    else await addDoc(collection(db,"events"), {...eventForm, createdAt: serverTimestamp()});
+    setShowEventModal(false);
+  };
+  const deleteEvent = async (id) => { await deleteDoc(doc(db,"events",id)); };
+
+  // ── News CRUD ────────────────────────────────────────────
+  const openAddNews = () => { setEditingNews(null); setNewsForm({title:"",body:""}); setShowNewsModal(true); };
+  const openEditNews = (n) => { setEditingNews(n); setNewsForm({title:n.title,body:n.body}); setShowNewsModal(true); };
+  const saveNews = async () => {
+    if (!newsForm.title||!newsForm.body) return;
+    if (editingNews) await updateDoc(doc(db,"news",editingNews.id), newsForm);
+    else await addDoc(collection(db,"news"), {...newsForm, date:todayStr, author: user?.email||"Admin", createdAt:serverTimestamp()});
+    setShowNewsModal(false);
+  };
+  const deleteNews = async (id) => { await deleteDoc(doc(db,"news",id)); };
+
+  // ── Team CRUD ────────────────────────────────────────────
+  const openAddTeam  = () => { setEditingTeam(null); setTeamForm({name:"",trainer:"",training:"",jahrgang:""}); setShowTeamModal(true); };
+  const openEditTeam = (t) => { setEditingTeam(t); setTeamForm({name:t.name,trainer:t.trainer,training:t.training,jahrgang:t.jahrgang}); setShowTeamModal(true); };
+  const saveTeam = async () => {
+    if (!teamForm.name) return;
+    if (editingTeam) await updateDoc(doc(db,"teams",editingTeam.id), teamForm);
+    else await addDoc(collection(db,"teams"), teamForm);
+    setShowTeamModal(false);
+  };
+  const deleteTeam = async (id) => { await deleteDoc(doc(db,"teams",id)); };
+
+  // ── Intro text ───────────────────────────────────────────
+  const saveIntro = async (text) => {
+    await setDoc(doc(db,"settings","intro"), { text });
+  };
+
+  // ── Messages ─────────────────────────────────────────────
+  const sendMessage = async () => {
+    if (!chatInput.trim()||!activeThread) return;
+    const msg = { from: user?.email||"Admin", text:chatInput, time: new Date().toLocaleTimeString("de",{hour:"2-digit",minute:"2-digit"}) };
+    const updated = [...(activeThread.messages||[]), msg];
+    await updateDoc(doc(db,"threads",activeThread.id), { messages: updated });
+    setActiveThread({...activeThread, messages: updated});
+    setChatInput("");
+  };
+  const createThread = async () => {
+    const label = newThreadType==="group" ? newThreadTeam : newThreadName;
+    const ref = await addDoc(collection(db,"threads"), { type:newThreadType, label, team:newThreadType==="group"?newThreadTeam:"", messages:[] });
+    setActiveThread({ id:ref.id, type:newThreadType, label, team:newThreadType==="group"?newThreadTeam:"", messages:[] });
+    setShowNewThread(false); setNewThreadName("");
+  };
+
+  // ── Calendar helpers ─────────────────────────────────────
+  const matchesFilter = (ev) => filterTeam==="Alle Mannschaften"||ev.team===filterTeam||ev.team==="Alle Mannschaften";
+  const getDay = (day) => {
+    const d=`${year}-${String(month+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+    return events.filter(e=>e.date===d&&matchesFilter(e));
+  };
+  const selectedStr = selectedDay ? `${year}-${String(month+1).padStart(2,"0")}-${String(selectedDay).padStart(2,"0")}` : "";
+  const selectedEvs = selectedDay ? events.filter(e=>e.date===selectedStr&&matchesFilter(e)).sort((a,b)=>a.time?.localeCompare(b.time)) : [];
+  const upcoming    = [...events].filter(e=>e.date>=todayStr&&matchesFilter(e)).sort((a,b)=>a.date?.localeCompare(b.date)||a.time?.localeCompare(b.time)).slice(0,10);
+  const nextThree   = [...events].filter(e=>e.date>=todayStr).sort((a,b)=>a.date?.localeCompare(b.date)||a.time?.localeCompare(b.time)).slice(0,3);
+
+  const NAV = [
+    { id:"home",     icon:"🏠", label:"Start"        },
+    { id:"calendar", icon:"📅", label:"Kalender"     },
+    { id:"schedule", icon:"📋", label:"Spielplan"    },
+    { id:"teams",    icon:"👥", label:"Mannschaften" },
+    { id:"messages", icon:"💬", label:"Nachrichten"  },
+  ];
+
+  const EventCard = ({ ev, controls=true }) => {
+    const t=typeOf(ev.type); const hasBus=ev.bus1||ev.bus2;
+    return (
+      <div style={{borderLeft:`3px solid ${hasBus?BUS.color:t.color}`,background:hasBus?BUS.bg:t.bg,borderRadius:"0 8px 8px 0",padding:"11px 13px",marginBottom:10}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:5}}>
+              <Chip bg={t.color+"22"} c={t.color}>{t.label}</Chip>
+              {ev.team&&<Chip bg={B.anthracite+"11"} c={B.charcoal}>{ev.team}</Chip>}
+              {ev.bus1&&<Chip bg={BUS.bg} c={BUS.color} border={`1px solid ${BUS.border}`}>🚌 Bus 1</Chip>}
+              {ev.bus2&&<Chip bg={BUS.bg} c={BUS.color} border={`1px solid ${BUS.border}`}>🚌 Bus 2</Chip>}
+            </div>
+            <div style={{fontWeight:800,fontSize:15}}>{ev.title}</div>
+            <div style={{fontSize:13,color:B.teal,fontWeight:700,marginTop:2}}>⏰ {ev.time} Uhr</div>
+            {ev.location&&<div style={{fontSize:12,color:B.midGrey,marginTop:1}}>📍 {ev.location}</div>}
+            {ev.notes&&<div style={{fontSize:12,color:B.charcoal,marginTop:4,fontStyle:"italic",fontFamily:"'Barlow',sans-serif"}}>{ev.notes}</div>}
+          </div>
+          {isAdmin&&controls&&(
+            <div style={{display:"flex",flexDirection:"column",gap:4,flexShrink:0}}>
+              <button className="btn btn-edit" onClick={()=>openEditEvent(ev)}>✏️</button>
+              <button className="btn btn-danger" onClick={()=>deleteEvent(ev.id)}>🗑️</button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // ── Loading / Auth screens ────────────────────────────────
+  if (authLoading) return (
+    <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:B.offWhite,flexDirection:"column",gap:16}}>
+      <PineLogo size={52}/>
+      <div style={{fontSize:14,color:B.midGrey,fontFamily:"'Barlow',sans-serif"}}>Wird geladen…</div>
+    </div>
+  );
+
+  if (!user) return (
+    <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:B.offWhite,fontFamily:"'Barlow Condensed',sans-serif"}}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=Barlow:wght@400;500&display=swap');*{box-sizing:border-box;margin:0;padding:0;}.input{background:#fff;border:1.5px solid ${B.lightGrey};color:${B.anthracite};border-radius:8px;padding:9px 13px;font-family:'Barlow',sans-serif;font-size:14px;width:100%;outline:none;transition:border-color .2s;}.input:focus{border-color:${B.teal};}.btn{border:none;border-radius:7px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:1px;text-transform:uppercase;transition:all .18s;}.btn-primary{background:${B.teal};color:white;padding:10px 22px;font-size:14px;}.btn-primary:hover{background:${B.tealDark};}.btn-primary:disabled{background:${B.lightGrey};color:${B.midGrey};cursor:not-allowed;}`}</style>
+      <div style={{background:B.white,border:`1.5px solid ${B.lightGrey}`,borderRadius:16,padding:"40px 36px",width:"100%",maxWidth:400,boxShadow:"0 20px 60px rgba(0,0,0,.1)"}}>
+        <div style={{display:"flex",flexDirection:"column",alignItems:"center",marginBottom:28}}>
+          <PineLogo size={52}/>
+          <div style={{fontSize:22,fontWeight:900,letterSpacing:2,textTransform:"uppercase",marginTop:12}}>TV Hindelang</div>
+          <div style={{fontSize:13,color:B.midGrey,fontWeight:700,letterSpacing:2,textTransform:"uppercase"}}>Fussball</div>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          <div>
+            <label style={LBL}>E-Mail</label>
+            <input className="input" type="email" placeholder="deine@email.de" value={loginEmail}
+              onChange={e=>setLoginEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleLogin()}/>
+          </div>
+          <div>
+            <label style={LBL}>Passwort</label>
+            <input className="input" type="password" placeholder="••••••••" value={loginPassword}
+              onChange={e=>setLoginPassword(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleLogin()}/>
+          </div>
+          {loginError&&<div style={{color:B.red,fontSize:13,fontFamily:"'Barlow',sans-serif"}}>❌ {loginError}</div>}
+          <button className="btn btn-primary" style={{marginTop:4}} onClick={handleLogin} disabled={loginLoading||!loginEmail||!loginPassword}>
+            {loginLoading?"Wird eingeloggt…":"Einloggen"}
+          </button>
+        </div>
+        <div style={{marginTop:20,fontSize:12,color:B.midGrey,fontFamily:"'Barlow',sans-serif",textAlign:"center",lineHeight:1.5}}>
+          Kein Konto? Bitte den Administrator kontaktieren.
+        </div>
+      </div>
+    </div>
+  );
+
+  // ══════════════════════════════════════════════
+  return (
+    <div style={{fontFamily:"'Barlow Condensed','Arial Narrow',sans-serif",background:B.offWhite,minHeight:"100vh",color:B.anthracite,display:"flex",flexDirection:"column"}}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800;900&family=Barlow:wght@400;500;600&display=swap');
+        *{box-sizing:border-box;margin:0;padding:0;}
+        ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:#c0ced0;border-radius:4px}
+        .nav-btn{background:none;border:none;cursor:pointer;padding:13px 15px;color:${B.midGrey};font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;border-bottom:3px solid transparent;transition:all .2s;display:flex;align-items:center;gap:6px;white-space:nowrap;}
+        .nav-btn:hover{color:${B.teal};} .nav-btn.active{color:${B.teal};border-bottom-color:${B.teal};}
+        .btn{border:none;border-radius:7px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:1px;text-transform:uppercase;transition:all .18s;}
+        .btn-primary{background:${B.teal};color:white;padding:10px 22px;font-size:14px;} .btn-primary:hover{background:${B.tealDark};}
+        .btn-primary:disabled{background:${B.lightGrey};color:${B.midGrey};cursor:not-allowed;}
+        .btn-ghost{background:${B.lightGrey};color:${B.charcoal};padding:8px 16px;font-size:13px;} .btn-ghost:hover{background:#d0dadc;}
+        .btn-edit{background:${B.tealLight};color:${B.teal};padding:6px 10px;font-size:12px;} .btn-edit:hover{background:${B.teal};color:white;}
+        .btn-danger{background:${B.redLight};color:${B.red};padding:6px 10px;font-size:12px;} .btn-danger:hover{background:${B.red};color:white;}
+        .card{background:${B.white};border:1.5px solid ${B.lightGrey};border-radius:10px;}
+        .input{background:${B.white};border:1.5px solid ${B.lightGrey};color:${B.anthracite};border-radius:8px;padding:9px 13px;font-family:'Barlow',sans-serif;font-size:14px;width:100%;outline:none;transition:border-color .2s;} .input:focus{border-color:${B.teal};}
+        .modal-bg{position:fixed;inset:0;background:rgba(28,28,28,.5);display:flex;align-items:center;justify-content:center;z-index:200;padding:20px;backdrop-filter:blur(4px);}
+        .modal{background:${B.white};border-radius:14px;padding:30px;width:100%;max-width:520px;box-shadow:0 24px 64px rgba(0,0,0,.15);max-height:90vh;overflow-y:auto;}
+        .cal-day{min-height:64px;background:${B.white};border:1.5px solid ${B.lightGrey};border-radius:8px;padding:6px;cursor:pointer;transition:all .15s;}
+        .cal-day:hover{border-color:${B.tealMid};background:#f0fbfc;} .cal-day.today{border-color:${B.teal};background:${B.tealLight};}
+        .cal-day.selected{border-color:${B.teal};background:#dff2f5;box-shadow:0 0 0 2px ${B.tealMid};} .cal-day.other-month{opacity:.2;pointer-events:none;}
+        .event-bar{height:4px;border-radius:3px;margin:1px 0;}
+        .tile{background:${B.white};border:1.5px solid ${B.lightGrey};border-radius:14px;padding:22px;cursor:pointer;transition:all .2s;display:flex;flex-direction:column;gap:12px;}
+        .tile:hover{border-color:${B.teal};transform:translateY(-2px);box-shadow:0 8px 24px rgba(41,184,200,.1);}
+        .team-card{background:${B.white};border:1.5px solid ${B.lightGrey};border-radius:10px;padding:18px 20px;cursor:pointer;transition:all .2s;}
+        .team-card:hover{border-color:${B.teal};transform:translateY(-2px);box-shadow:0 6px 20px rgba(41,184,200,.1);}
+        .chat-me{background:${B.teal};color:white;border-radius:14px 14px 2px 14px;padding:9px 14px;max-width:78%;align-self:flex-end;font-size:14px;font-family:'Barlow',sans-serif;}
+        .chat-them{background:${B.white};border:1.5px solid ${B.lightGrey};border-radius:14px 14px 14px 2px;padding:9px 14px;max-width:78%;align-self:flex-start;font-size:14px;font-family:'Barlow',sans-serif;}
+        .pill{border:none;border-radius:20px;padding:5px 13px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;letter-spacing:.8px;text-transform:uppercase;white-space:nowrap;transition:all .15s;}
+        .admin-tab{background:none;border:none;border-bottom:2px solid transparent;padding:10px 18px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:1px;text-transform:uppercase;color:${B.midGrey};transition:all .2s;}
+        .admin-tab:hover{color:${B.amber};} .admin-tab.active{color:${B.amber};border-bottom-color:${B.amber};}
+        select.input option{background:white;} textarea.input{resize:vertical;min-height:80px;}
+      `}</style>
+
+      {/* ── HEADER ── */}
+      <header style={{background:B.white,borderBottom:`2px solid ${B.lightGrey}`,padding:"0 24px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0,boxShadow:"0 2px 12px rgba(0,0,0,.06)"}}>
+        <div style={{display:"flex",alignItems:"center",gap:12,padding:"8px 0",cursor:"pointer"}} onClick={()=>{setView("home");setSelectedTeam(null);}}>
+          <PineLogo size={40}/>
+          <div>
+            <div style={{display:"flex",alignItems:"baseline",gap:4}}>
+              <span style={{fontSize:12,fontWeight:800,color:B.teal,letterSpacing:2}}>TV</span>
+              <span style={{fontSize:20,fontWeight:900,color:B.anthracite,letterSpacing:3,textTransform:"uppercase"}}>HINDELANG</span>
+            </div>
+            <div style={{fontSize:10,fontWeight:700,color:B.teal,letterSpacing:3,textTransform:"uppercase",marginTop:-2}}>FUSSBALL</div>
+          </div>
+        </div>
+        <nav style={{display:"flex",alignItems:"center"}}>
+          {NAV.map(({id,icon,label})=>(
+            <button key={id} className={`nav-btn ${view===id?"active":""}`} onClick={()=>{setView(id);setSelectedTeam(null);}}>
+              <span>{icon}</span>{label}
+            </button>
+          ))}
+          <div style={{width:1,height:28,background:B.lightGrey,margin:"0 8px"}}/>
+          {isAdmin&&(
+            <button className={`nav-btn ${view==="admin"?"active":""}`} style={{color:B.amber}} onClick={()=>setView("admin")}>⚙️ Admin</button>
+          )}
+          <button className="btn btn-ghost" style={{fontSize:11,padding:"5px 10px",marginLeft:4}} onClick={handleLogout}>Abmelden</button>
+        </nav>
+      </header>
+
+      {/* ── FILTER BAR ── */}
+      {(view==="calendar"||view==="schedule")&&(
+        <div style={{background:B.white,borderBottom:`1.5px solid ${B.lightGrey}`,padding:"8px 24px",display:"flex",gap:6,overflowX:"auto",flexShrink:0}}>
+          {teamNames.map(t=>(
+            <button key={t} className="pill" style={{background:filterTeam===t?B.teal:B.offWhite,color:filterTeam===t?B.white:B.midGrey}} onClick={()=>setFilterTeam(t)}>{t}</button>
+          ))}
+        </div>
+      )}
+
+      {/* ── CONTENT ── */}
+      <main style={{flex:1,overflow:"auto",padding:"28px 24px"}}>
+
+        {/* ════ HOME ════ */}
+        {view==="home"&&(
+          <div style={{maxWidth:960,margin:"0 auto"}}>
+            <div style={{background:`linear-gradient(135deg,${B.teal},${B.tealDark})`,borderRadius:16,padding:"32px 36px",marginBottom:28,color:B.white,position:"relative",overflow:"hidden"}}>
+              <div style={{position:"absolute",right:-10,top:-30,opacity:.07,fontSize:200,lineHeight:1,pointerEvents:"none"}}>⚽</div>
+              <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:14}}>
+                <PineLogo size={46}/>
+                <div>
+                  <div style={{fontSize:11,fontWeight:700,letterSpacing:3,opacity:.8,textTransform:"uppercase"}}>Willkommen bei</div>
+                  <div style={{fontSize:30,fontWeight:900,letterSpacing:2,textTransform:"uppercase",lineHeight:1.1}}>TV Hindelang Fussball</div>
+                </div>
+              </div>
+              <p style={{fontFamily:"'Barlow',sans-serif",fontSize:15,lineHeight:1.65,opacity:.92,maxWidth:580}}>{introText}</p>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+              <div className="tile" onClick={()=>setView("calendar")}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <span style={{fontSize:13,fontWeight:800,letterSpacing:1.5,textTransform:"uppercase",color:B.teal}}>📅 Nächste Termine</span>
+                  <span style={{fontSize:11,color:B.midGrey,fontWeight:600}}>Kalender →</span>
+                </div>
+                {nextThree.length===0
+                  ? <div style={{fontSize:13,color:B.midGrey,fontFamily:"'Barlow',sans-serif"}}>Keine kommenden Termine</div>
+                  : nextThree.map(ev=>{
+                      const t=typeOf(ev.type); const d=new Date(ev.date); const hasBus=ev.bus1||ev.bus2;
+                      return (
+                        <div key={ev.id} style={{display:"flex",gap:12,alignItems:"center",padding:"9px 11px",background:B.offWhite,borderRadius:8,borderLeft:`3px solid ${hasBus?BUS.color:t.color}`}}>
+                          <div style={{textAlign:"center",minWidth:30,flexShrink:0}}>
+                            <div style={{fontSize:19,fontWeight:900,color:hasBus?BUS.color:t.color,lineHeight:1}}>{d.getDate()}</div>
+                            <div style={{fontSize:10,color:B.midGrey,fontWeight:700}}>{MONTHS[d.getMonth()].slice(0,3).toUpperCase()}</div>
+                          </div>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontWeight:800,fontSize:14,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{ev.title}</div>
+                            <div style={{fontSize:11,color:B.midGrey}}>⏰ {ev.time} · {ev.team}</div>
+                          </div>
+                        </div>
+                      );
+                    })
+                }
+              </div>
+              <div className="tile" onClick={()=>setView("schedule")}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <span style={{fontSize:13,fontWeight:800,letterSpacing:1.5,textTransform:"uppercase",color:B.red}}>📋 Spielplan</span>
+                  <span style={{fontSize:11,color:B.midGrey,fontWeight:600}}>Alle Spiele →</span>
+                </div>
+                {events.filter(e=>e.type==="game"&&e.date>=todayStr).sort((a,b)=>a.date?.localeCompare(b.date)).slice(0,3).map(ev=>{
+                  const d=new Date(ev.date);
+                  return (
+                    <div key={ev.id} style={{display:"flex",gap:10,alignItems:"center",padding:"9px 11px",background:B.redLight,borderRadius:8}}>
+                      <div style={{textAlign:"center",minWidth:28,flexShrink:0}}>
+                        <div style={{fontSize:17,fontWeight:900,color:B.red,lineHeight:1}}>{d.getDate()}</div>
+                        <div style={{fontSize:10,color:B.red,fontWeight:700,opacity:.7}}>{MONTHS[d.getMonth()].slice(0,3).toUpperCase()}</div>
+                      </div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontWeight:800,fontSize:13,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{ev.title}</div>
+                        <div style={{fontSize:11,color:B.midGrey}}>{ev.team} · {ev.time} Uhr</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="tile" onClick={()=>setView("teams")}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <span style={{fontSize:13,fontWeight:800,letterSpacing:1.5,textTransform:"uppercase",color:B.green}}>👥 Mannschaften</span>
+                  <span style={{fontSize:11,color:B.midGrey,fontWeight:600}}>Übersicht →</span>
+                </div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                  {teams.map(t=><span key={t.id} style={{display:"inline-block",padding:"2px 9px",borderRadius:20,fontSize:11,fontWeight:700,background:B.tealLight,color:B.teal}}>{t.name}</span>)}
+                </div>
+                <div style={{fontSize:13,color:B.midGrey,fontFamily:"'Barlow',sans-serif"}}>{teams.length} aktive Mannschaften</div>
+              </div>
+              <div className="tile" style={{cursor:"default"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <span style={{fontSize:13,fontWeight:800,letterSpacing:1.5,textTransform:"uppercase",color:B.amber}}>📢 News</span>
+                  {isAdmin&&<button className="btn btn-primary" style={{padding:"5px 12px",fontSize:11}} onClick={e=>{e.stopPropagation();openAddNews();}}>+ News</button>}
+                </div>
+                {news.slice(0,2).map(n=>(
+                  <div key={n.id} style={{padding:"10px 12px",background:B.amberLight,borderRadius:8,borderLeft:`3px solid ${B.amber}`}}>
+                    <div style={{fontWeight:800,fontSize:14,marginBottom:3}}>{n.title}</div>
+                    <div style={{fontSize:12,color:B.charcoal,fontFamily:"'Barlow',sans-serif",lineHeight:1.5}}>{n.body?.slice(0,90)}{(n.body?.length||0)>90?"…":""}</div>
+                    <div style={{fontSize:10,color:B.midGrey,marginTop:4,fontWeight:600}}>{n.date} · {n.author}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ════ CALENDAR ════ */}
+        {view==="calendar"&&(
+          <div style={{display:"grid",gridTemplateColumns:"1fr 320px",gap:24,maxWidth:1200,margin:"0 auto"}}>
+            <div>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}>
+                <h1 style={{fontSize:30,fontWeight:900,letterSpacing:2,textTransform:"uppercase"}}>{MONTHS[month]} <span style={{color:B.teal}}>{year}</span></h1>
+                <div style={{display:"flex",gap:8}}>
+                  <button className="btn btn-ghost" onClick={()=>setCurrentDate(new Date(year,month-1,1))}>◀</button>
+                  <button className="btn btn-ghost" onClick={()=>setCurrentDate(new Date(year,month+1,1))}>▶</button>
+                  {isAdmin&&<button className="btn btn-primary" onClick={()=>openAddEvent()}>+ Termin</button>}
+                </div>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:5,marginBottom:5}}>
+                {DAYS.map(d=><div key={d} style={{textAlign:"center",fontSize:11,fontWeight:700,letterSpacing:2,color:B.midGrey}}>{d}</div>)}
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:5}}>
+                {Array.from({length:startOffset}).map((_,i)=><div key={`e${i}`} className="cal-day other-month"/>)}
+                {Array.from({length:daysInMonth}).map((_,i)=>{
+                  const day=i+1; const dayEvs=getDay(day);
+                  const now=new Date(); const isToday=day===now.getDate()&&month===now.getMonth()&&year===now.getFullYear();
+                  const isSel=selectedDay===day;
+                  return (
+                    <div key={day} className={`cal-day ${isToday?"today":""} ${isSel?"selected":""}`} onClick={()=>setSelectedDay(day===selectedDay?null:day)}>
+                      <div style={{fontSize:12,fontWeight:700,color:isToday||isSel?B.teal:B.charcoal,marginBottom:2}}>{day}</div>
+                      {dayEvs.slice(0,3).map(ev=><div key={ev.id} className="event-bar" style={{background:(ev.bus1||ev.bus2)?BUS.color:typeOf(ev.type).color}} title={ev.title}/>)}
+                      {dayEvs.length>3&&<div style={{fontSize:9,color:B.midGrey,fontWeight:700}}>+{dayEvs.length-3}</div>}
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{display:"flex",gap:14,marginTop:14,flexWrap:"wrap"}}>
+                {EVENT_TYPES.map(t=><div key={t.value} style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:B.midGrey}}><div style={{width:10,height:10,borderRadius:2,background:t.color}}/>{t.label}</div>)}
+                <div style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:B.midGrey}}><div style={{width:10,height:10,borderRadius:2,background:BUS.color}}/>Bus reserviert</div>
+              </div>
+            </div>
+            <div className="card" style={{padding:20,alignSelf:"start"}}>
+              {selectedDay ? (
+                <>
+                  <div style={{marginBottom:16}}>
+                    <div style={{fontSize:20,fontWeight:900}}>{selectedDay}. {MONTHS[month]} {year}</div>
+                    <div style={{fontSize:12,color:B.midGrey,marginTop:2}}>{selectedEvs.length} Termin{selectedEvs.length!==1?"e":""}</div>
+                  </div>
+                  {selectedEvs.length===0
+                    ? <div style={{textAlign:"center",color:B.midGrey,padding:"24px 0",fontSize:14,fontFamily:"'Barlow',sans-serif"}}>Keine Termine an diesem Tag</div>
+                    : selectedEvs.map(ev=><EventCard key={ev.id} ev={ev}/>)
+                  }
+                  {isAdmin&&<button className="btn btn-primary" style={{width:"100%",marginTop:8}} onClick={()=>openAddEvent(selectedStr)}>+ Termin hinzufügen</button>}
+                </>
+              ) : (
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:220,color:B.midGrey,gap:10}}>
+                  <div style={{fontSize:40}}>📅</div>
+                  <div style={{fontSize:14,fontFamily:"'Barlow',sans-serif",textAlign:"center"}}>Tag auswählen<br/>für Details</div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ════ SCHEDULE ════ */}
+        {view==="schedule"&&(
+          <div style={{maxWidth:920,margin:"0 auto"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:22}}>
+              <h1 style={{fontSize:30,fontWeight:900,letterSpacing:2,textTransform:"uppercase"}}>Spielplan & <span style={{color:B.teal}}>Termine</span></h1>
+              {isAdmin&&<button className="btn btn-primary" onClick={()=>openAddEvent()}>+ Neuer Termin</button>}
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              {upcoming.length===0
+                ? <div style={{textAlign:"center",color:B.midGrey,padding:48}}>Keine Termine für diese Auswahl</div>
+                : upcoming.map(ev=>{
+                    const t=typeOf(ev.type); const d=new Date(ev.date); const hasBus=ev.bus1||ev.bus2;
+                    return (
+                      <div key={ev.id} className="card" style={{display:"grid",gridTemplateColumns:"64px 3px 1fr auto",gap:14,alignItems:"center",padding:"14px 18px",transition:"border-color .2s"}}
+                        onMouseEnter={e=>e.currentTarget.style.borderColor=hasBus?BUS.color:t.color}
+                        onMouseLeave={e=>e.currentTarget.style.borderColor=B.lightGrey}>
+                        <div style={{textAlign:"center"}}>
+                          <div style={{fontSize:24,fontWeight:900,color:hasBus?BUS.color:t.color,lineHeight:1}}>{d.getDate()}</div>
+                          <div style={{fontSize:11,color:B.midGrey,fontWeight:700}}>{MONTHS[d.getMonth()].slice(0,3).toUpperCase()}</div>
+                        </div>
+                        <div style={{width:3,background:hasBus?BUS.color:t.color,borderRadius:2,alignSelf:"stretch"}}/>
+                        <div>
+                          <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3,flexWrap:"wrap"}}>
+                            <span style={{fontWeight:800,fontSize:16}}>{ev.title}</span>
+                            <Chip bg={t.bg} c={t.color}>{t.label}</Chip>
+                            {ev.team&&<Chip bg={B.anthracite+"11"} c={B.charcoal}>{ev.team}</Chip>}
+                            {ev.bus1&&<Chip bg={BUS.bg} c={BUS.color} border={`1px solid ${BUS.border}`}>🚌 Bus 1</Chip>}
+                            {ev.bus2&&<Chip bg={BUS.bg} c={BUS.color} border={`1px solid ${BUS.border}`}>🚌 Bus 2</Chip>}
+                          </div>
+                          <div style={{color:B.midGrey,fontSize:12}}>⏰ {ev.time} Uhr · 📍 {ev.location}</div>
+                          {ev.notes&&<div style={{fontSize:12,color:B.charcoal,marginTop:2,fontStyle:"italic",fontFamily:"'Barlow',sans-serif"}}>{ev.notes}</div>}
+                        </div>
+                        {isAdmin&&<div style={{display:"flex",gap:6}}><button className="btn btn-edit" onClick={()=>openEditEvent(ev)}>✏️</button><button className="btn btn-danger" onClick={()=>deleteEvent(ev.id)}>🗑️</button></div>}
+                      </div>
+                    );
+                  })
+              }
+            </div>
+          </div>
+        )}
+
+        {/* ════ TEAMS ════ */}
+        {view==="teams"&&!selectedTeam&&(
+          <div style={{maxWidth:1040,margin:"0 auto"}}>
+            <h1 style={{fontSize:30,fontWeight:900,letterSpacing:2,textTransform:"uppercase",marginBottom:22}}>Mannschaften <span style={{color:B.teal}}>({teams.length})</span></h1>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:12}}>
+              {teams.map(ti=>(
+                <div key={ti.id} className="team-card" onClick={()=>setSelectedTeam(ti)}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
+                    <div style={{fontSize:22,fontWeight:900,letterSpacing:1}}>{ti.name}</div>
+                    <span style={{display:"inline-block",padding:"2px 9px",borderRadius:20,fontSize:11,fontWeight:700,background:B.tealLight,color:B.teal}}>{ti.jahrgang}</span>
+                  </div>
+                  <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif",marginBottom:4}}>👤 <strong>Trainer:</strong> {ti.trainer}</div>
+                  <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif"}}>⏰ {ti.training}</div>
+                  <div style={{marginTop:12,fontSize:11,color:B.teal,fontWeight:700}}>Details →</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {view==="teams"&&selectedTeam&&(
+          <div style={{maxWidth:680,margin:"0 auto"}}>
+            <button className="btn btn-ghost" style={{marginBottom:20}} onClick={()=>setSelectedTeam(null)}>← Zurück</button>
+            <div className="card" style={{padding:"28px 32px"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:24}}>
+                <div>
+                  <div style={{fontSize:32,fontWeight:900,letterSpacing:2,textTransform:"uppercase"}}>{selectedTeam.name}</div>
+                  <span style={{display:"inline-block",padding:"2px 9px",borderRadius:20,fontSize:11,fontWeight:700,background:B.tealLight,color:B.teal,marginTop:6}}>{selectedTeam.jahrgang}</span>
+                </div>
+                {isAdmin&&<button className="btn btn-edit" onClick={()=>openEditTeam(selectedTeam)}>✏️ Bearbeiten</button>}
+              </div>
+              {[{icon:"👤",label:"Trainer",val:selectedTeam.trainer},{icon:"⏰",label:"Trainingszeiten",val:selectedTeam.training},{icon:"🎂",label:"Jahrgang",val:selectedTeam.jahrgang}].map(row=>(
+                <div key={row.label} style={{display:"flex",gap:16,alignItems:"center",padding:"14px 0",borderBottom:`1px solid ${B.lightGrey}`}}>
+                  <div style={{width:36,height:36,borderRadius:"50%",background:B.tealLight,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>{row.icon}</div>
+                  <div>
+                    <div style={{fontSize:11,fontWeight:700,letterSpacing:1,color:B.midGrey,textTransform:"uppercase"}}>{row.label}</div>
+                    <div style={{fontSize:15,fontWeight:700,marginTop:1,fontFamily:"'Barlow',sans-serif"}}>{row.val}</div>
+                  </div>
+                </div>
+              ))}
+              <div style={{marginTop:20}}>
+                <div style={{fontSize:12,fontWeight:700,letterSpacing:1,color:B.midGrey,textTransform:"uppercase",marginBottom:10}}>Nächste Termine</div>
+                {events.filter(e=>e.team===selectedTeam.name&&e.date>=todayStr).sort((a,b)=>a.date?.localeCompare(b.date)).slice(0,4).map(ev=><EventCard key={ev.id} ev={ev} controls={false}/>)}
+                {events.filter(e=>e.team===selectedTeam.name&&e.date>=todayStr).length===0&&<div style={{fontSize:13,color:B.midGrey,fontFamily:"'Barlow',sans-serif"}}>Keine kommenden Termine</div>}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ════ MESSAGES ════ */}
+        {view==="messages"&&(
+          <div style={{maxWidth:1100,margin:"0 auto",display:"grid",gridTemplateColumns:"270px 1fr",background:B.white,borderRadius:12,border:`1.5px solid ${B.lightGrey}`,overflow:"hidden",boxShadow:"0 4px 24px rgba(0,0,0,.07)",height:"calc(100vh - 160px)",minHeight:500}}>
+            <div style={{borderRight:`1.5px solid ${B.lightGrey}`,display:"flex",flexDirection:"column",background:B.offWhite}}>
+              <div style={{padding:"16px 14px",borderBottom:`1.5px solid ${B.lightGrey}`,background:B.white,flexShrink:0}}>
+                <div style={{fontSize:15,fontWeight:900,letterSpacing:1,textTransform:"uppercase"}}>Nachrichten</div>
+              </div>
+              <div style={{flex:1,overflow:"auto"}}>
+                {threads.map(th=>{
+                  const last=th.messages?.slice(-1)[0]; const isActive=activeThread?.id===th.id;
+                  return (
+                    <div key={th.id} style={{padding:"11px 14px",display:"flex",gap:10,alignItems:"center",cursor:"pointer",background:isActive?B.tealLight:"transparent",borderBottom:`1px solid ${B.lightGrey}`,transition:"background .15s"}} onClick={()=>setActiveThread(th)}>
+                      <div style={{width:38,height:38,borderRadius:th.type==="group"?"10px":"50%",background:`linear-gradient(135deg,${B.teal},${B.tealDark})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,color:"white",fontWeight:800,flexShrink:0}}>
+                        {th.type==="group"?"👥":th.label?.slice(0,2).toUpperCase()}
+                      </div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontWeight:700,fontSize:14,color:isActive?B.teal:B.anthracite,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{th.label}</div>
+                        <div style={{fontSize:11,color:B.midGrey,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{last?`${last.from}: ${last.text}`:"Noch keine Nachrichten"}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {isAdmin&&<div style={{padding:"12px 14px",borderTop:`1.5px solid ${B.lightGrey}`,background:B.white,flexShrink:0}}>
+                <button className="btn btn-primary" style={{width:"100%",fontSize:12,padding:9}} onClick={()=>setShowNewThread(true)}>+ Neuer Chat</button>
+              </div>}
+            </div>
+            {activeThread ? (
+              <div style={{display:"flex",flexDirection:"column",height:"100%"}}>
+                <div style={{padding:"14px 20px",borderBottom:`1.5px solid ${B.lightGrey}`,display:"flex",alignItems:"center",gap:12,background:B.white,flexShrink:0}}>
+                  <div style={{width:38,height:38,borderRadius:activeThread.type==="group"?"10px":"50%",background:`linear-gradient(135deg,${B.teal},${B.tealDark})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,color:"white",fontWeight:800}}>
+                    {activeThread.type==="group"?"👥":activeThread.label?.slice(0,2).toUpperCase()}
+                  </div>
+                  <div>
+                    <div style={{fontWeight:800,fontSize:15}}>{activeThread.label}</div>
+                    <div style={{fontSize:11,color:B.midGrey}}>{activeThread.type==="group"?`Gruppen-Chat · ${activeThread.team}`:"Direktnachricht"}</div>
+                  </div>
+                </div>
+                <div style={{flex:1,overflow:"auto",padding:20,display:"flex",flexDirection:"column",gap:10,background:B.offWhite}}>
+                  {(!activeThread.messages||activeThread.messages.length===0)&&<div style={{textAlign:"center",color:B.midGrey,padding:"40px 0",fontSize:14}}>Noch keine Nachrichten</div>}
+                  {activeThread.messages?.map((msg,i)=>{
+                    const isMe=msg.from===user?.email;
+                    return (
+                      <div key={i} style={{display:"flex",flexDirection:"column",alignItems:isMe?"flex-end":"flex-start"}}>
+                        {!isMe&&<div style={{fontSize:11,color:B.midGrey,marginBottom:2,fontWeight:600}}>{msg.from}</div>}
+                        <div className={isMe?"chat-me":"chat-them"}>{msg.text}</div>
+                        <div style={{fontSize:10,color:B.midGrey,marginTop:3}}>{msg.time}</div>
+                      </div>
+                    );
+                  })}
+                  <div ref={chatEndRef}/>
+                </div>
+                <div style={{padding:"12px 16px",borderTop:`1.5px solid ${B.lightGrey}`,display:"flex",gap:10,background:B.white,flexShrink:0}}>
+                  <input className="input" placeholder="Nachricht schreiben..." value={chatInput} onChange={e=>setChatInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&sendMessage()} style={{flex:1}}/>
+                  <button className="btn btn-primary" style={{flexShrink:0,padding:"9px 20px"}} onClick={sendMessage}>➤</button>
+                </div>
+              </div>
+            ) : (
+              <div style={{display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12,color:B.midGrey,background:B.offWhite}}>
+                <div style={{fontSize:48}}>💬</div>
+                <div style={{fontSize:16,fontWeight:700}}>Chat auswählen</div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ════ ADMIN ════ */}
+        {view==="admin"&&isAdmin&&(
+          <div style={{maxWidth:1040,margin:"0 auto"}}>
+            <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:6}}>
+              <div style={{width:40,height:40,borderRadius:10,background:B.amberLight,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22}}>⚙️</div>
+              <div>
+                <h1 style={{fontSize:28,fontWeight:900,letterSpacing:2,textTransform:"uppercase",color:B.amber}}>Admin-Bereich</h1>
+                <div style={{fontSize:12,color:B.midGrey}}>Eingeloggt als: {user?.email}</div>
+              </div>
+            </div>
+            <div style={{display:"flex",borderBottom:`1.5px solid ${B.lightGrey}`,marginBottom:24,marginTop:16,background:B.white,borderRadius:"8px 8px 0 0",overflow:"hidden"}}>
+              {[["teams","👥 Mannschaften"],["events","📅 Termine"],["news","📢 News"],["intro","🏠 Starttext"]].map(([id,label])=>(
+                <button key={id} className={`admin-tab ${adminSection===id?"active":""}`} onClick={()=>setAdminSection(id)}>{label}</button>
+              ))}
+            </div>
+
+            {adminSection==="teams"&&(
+              <div>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+                  <div style={{fontSize:16,fontWeight:800,letterSpacing:1,textTransform:"uppercase"}}>Mannschaften ({teams.length})</div>
+                  <button className="btn btn-primary" onClick={openAddTeam}>+ Mannschaft hinzufügen</button>
+                </div>
+                <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                  {teams.map(t=>(
+                    <div key={t.id} className="card" style={{display:"grid",gridTemplateColumns:"160px 1fr 1fr 1fr auto",gap:16,alignItems:"center",padding:"14px 18px"}}>
+                      <div style={{fontWeight:800,fontSize:16}}>{t.name}</div>
+                      <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif"}}>👤 {t.trainer}</div>
+                      <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif"}}>⏰ {t.training}</div>
+                      <div style={{fontSize:13,color:B.midGrey,fontFamily:"'Barlow',sans-serif"}}>🎂 {t.jahrgang}</div>
+                      <div style={{display:"flex",gap:6}}>
+                        <button className="btn btn-edit" onClick={()=>openEditTeam(t)}>✏️</button>
+                        <button className="btn btn-danger" onClick={()=>deleteTeam(t.id)}>🗑️</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {adminSection==="events"&&(
+              <div>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+                  <div style={{fontSize:16,fontWeight:800,letterSpacing:1,textTransform:"uppercase"}}>Termine ({events.length})</div>
+                  <button className="btn btn-primary" onClick={()=>openAddEvent()}>+ Termin hinzufügen</button>
+                </div>
+                <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                  {[...events].sort((a,b)=>a.date?.localeCompare(b.date)).map(ev=>{
+                    const t=typeOf(ev.type); const d=new Date(ev.date);
+                    return (
+                      <div key={ev.id} className="card" style={{display:"grid",gridTemplateColumns:"80px 3px 1fr auto",gap:12,alignItems:"center",padding:"12px 16px"}}>
+                        <div style={{textAlign:"center"}}>
+                          <div style={{fontSize:20,fontWeight:900,color:t.color,lineHeight:1}}>{d.getDate()}</div>
+                          <div style={{fontSize:10,color:B.midGrey,fontWeight:700}}>{MONTHS[d.getMonth()].slice(0,3).toUpperCase()} {d.getFullYear()}</div>
+                        </div>
+                        <div style={{width:3,background:t.color,borderRadius:2,alignSelf:"stretch"}}/>
+                        <div>
+                          <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:3}}>
+                            <span style={{fontWeight:800,fontSize:14}}>{ev.title}</span>
+                            <Chip bg={t.bg} c={t.color}>{t.label}</Chip>
+                            <Chip bg={B.anthracite+"11"} c={B.charcoal}>{ev.team}</Chip>
+                          </div>
+                          <div style={{fontSize:12,color:B.midGrey}}>⏰ {ev.time} · 📍 {ev.location}</div>
+                        </div>
+                        <div style={{display:"flex",gap:6}}>
+                          <button className="btn btn-edit" onClick={()=>openEditEvent(ev)}>✏️</button>
+                          <button className="btn btn-danger" onClick={()=>deleteEvent(ev.id)}>🗑️</button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {adminSection==="news"&&(
+              <div>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+                  <div style={{fontSize:16,fontWeight:800,letterSpacing:1,textTransform:"uppercase"}}>News ({news.length})</div>
+                  <button className="btn btn-primary" onClick={openAddNews}>+ Neue Ankündigung</button>
+                </div>
+                <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                  {news.map(n=>(
+                    <div key={n.id} className="card" style={{padding:"16px 20px",borderLeft:`3px solid ${B.amber}`}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12}}>
+                        <div style={{flex:1}}>
+                          <div style={{fontWeight:800,fontSize:16,marginBottom:4}}>{n.title}</div>
+                          <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif",lineHeight:1.5,marginBottom:6}}>{n.body}</div>
+                          <div style={{fontSize:11,color:B.midGrey,fontWeight:600}}>{n.date} · {n.author}</div>
+                        </div>
+                        <div style={{display:"flex",gap:6,flexShrink:0}}>
+                          <button className="btn btn-edit" onClick={()=>openEditNews(n)}>✏️</button>
+                          <button className="btn btn-danger" onClick={()=>deleteNews(n.id)}>🗑️</button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {adminSection==="intro"&&(
+              <div style={{maxWidth:640}}>
+                <div style={{fontSize:16,fontWeight:800,letterSpacing:1,textTransform:"uppercase",marginBottom:16}}>Vorstellungstext Startseite</div>
+                <div className="card" style={{padding:24}}>
+                  <label style={LBL}>Text bearbeiten</label>
+                  <textarea className="input" value={introText} onChange={e=>setIntroText(e.target.value)} style={{minHeight:140,marginBottom:16}}/>
+                  <div style={{padding:"12px 16px",background:B.tealLight,borderRadius:8,borderLeft:`3px solid ${B.teal}`,marginBottom:16}}>
+                    <div style={{fontSize:11,fontWeight:700,color:B.teal,letterSpacing:1,marginBottom:4}}>VORSCHAU</div>
+                    <p style={{fontFamily:"'Barlow',sans-serif",fontSize:14,lineHeight:1.6,color:B.charcoal}}>{introText}</p>
+                  </div>
+                  <button className="btn btn-primary" style={{width:"100%"}} onClick={()=>saveIntro(introText)}>💾 Speichern</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </main>
+
+      {/* ── FOOTER ── */}
+      <footer style={{background:B.white,borderTop:`1.5px solid ${B.lightGrey}`,padding:"10px 24px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+        <div style={{fontSize:11,color:B.midGrey,fontWeight:600}}>© TV Hindelang Fussball</div>
+        <div style={{display:"flex",gap:20}}>
+          {[["Impressum","https://share.google/fPlP9Wjcsvyabws2C"],["Datenschutz","https://share.google/887uLP0KRXJTx68Ws"]].map(([label,url])=>(
+            <a key={label} href={url} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:B.midGrey,fontWeight:700,letterSpacing:1,textTransform:"uppercase",textDecoration:"none"}}>{label}</a>
+          ))}
+        </div>
+      </footer>
+
+      {/* ════ EVENT MODAL ════ */}
+      {showEventModal&&(
+        <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&setShowEventModal(false)}>
+          <div className="modal">
+            <div style={{height:4,background:`linear-gradient(90deg,${B.teal},${B.tealDark})`,borderRadius:"4px 4px 0 0",margin:"-30px -30px 22px"}}/>
+            <h2 style={{fontSize:22,fontWeight:900,letterSpacing:1,textTransform:"uppercase",marginBottom:20}}>{editingEvent?"Termin bearbeiten":"Neuer Termin"}</h2>
+            <div style={{display:"flex",flexDirection:"column",gap:13}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                <div><label style={LBL}>Typ</label>
+                  <select className="input" value={eventForm.type} onChange={e=>setEventForm({...eventForm,type:e.target.value})}>
+                    {EVENT_TYPES.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}
+                  </select>
+                </div>
+                <div><label style={LBL}>Mannschaft</label>
+                  <select className="input" value={eventForm.team} onChange={e=>setEventForm({...eventForm,team:e.target.value})}>
+                    {teamNames.map(t=><option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div><label style={LBL}>Titel *</label>
+                <input className="input" placeholder="z.B. Heimspiel vs. SV Musterstadt" value={eventForm.title} onChange={e=>setEventForm({...eventForm,title:e.target.value})}/>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                <div><label style={LBL}>Datum *</label>
+                  <input className="input" type="date" value={eventForm.date} onChange={e=>setEventForm({...eventForm,date:e.target.value})}/>
+                </div>
+                <div><label style={LBL}>Uhrzeit</label>
+                  <input className="input" type="time" value={eventForm.time} onChange={e=>setEventForm({...eventForm,time:e.target.value})}/>
+                </div>
+              </div>
+              <div><label style={LBL}>Ort</label>
+                <input className="input" placeholder="z.B. Sportplatz Hauptfeld" value={eventForm.location} onChange={e=>setEventForm({...eventForm,location:e.target.value})}/>
+              </div>
+              <div><label style={LBL}>Hinweise</label>
+                <textarea className="input" value={eventForm.notes} onChange={e=>setEventForm({...eventForm,notes:e.target.value})}/>
+              </div>
+              <div><label style={LBL}>🚌 Vereinsbus</label>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                  {[["bus1","Bus 1"],["bus2","Bus 2"]].map(([key,label])=>(
+                    <div key={key} onClick={()=>setEventForm({...eventForm,[key]:!eventForm[key]})}
+                      style={{display:"flex",alignItems:"center",gap:10,padding:"10px 13px",borderRadius:8,border:`2px solid ${eventForm[key]?BUS.color:B.lightGrey}`,background:eventForm[key]?BUS.bg:B.white,cursor:"pointer",transition:"all .15s"}}>
+                      <div style={{width:20,height:20,borderRadius:5,border:`2px solid ${eventForm[key]?BUS.color:B.lightGrey}`,background:eventForm[key]?BUS.color:B.white,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        {eventForm[key]&&<span style={{color:"white",fontSize:12,fontWeight:800}}>✓</span>}
+                      </div>
+                      <span style={{fontSize:13,fontWeight:800,color:eventForm[key]?BUS.color:B.charcoal}}>{label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div style={{display:"flex",gap:10,marginTop:4}}>
+                <button className="btn btn-ghost" style={{flex:1}} onClick={()=>setShowEventModal(false)}>Abbrechen</button>
+                <button className="btn btn-primary" style={{flex:2}} onClick={saveEvent} disabled={!eventForm.title||!eventForm.date}>{editingEvent?"✓ Speichern":"+ Erstellen"}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ════ NEWS MODAL ════ */}
+      {showNewsModal&&(
+        <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&setShowNewsModal(false)}>
+          <div className="modal">
+            <div style={{height:4,background:`linear-gradient(90deg,${B.amber},${B.red})`,borderRadius:"4px 4px 0 0",margin:"-30px -30px 22px"}}/>
+            <h2 style={{fontSize:22,fontWeight:900,letterSpacing:1,textTransform:"uppercase",marginBottom:20}}>{editingNews?"News bearbeiten":"Neue Ankündigung"}</h2>
+            <div style={{display:"flex",flexDirection:"column",gap:12}}>
+              <div><label style={LBL}>Titel *</label>
+                <input className="input" value={newsForm.title} onChange={e=>setNewsForm({...newsForm,title:e.target.value})}/>
+              </div>
+              <div><label style={LBL}>Text *</label>
+                <textarea className="input" style={{minHeight:100}} value={newsForm.body} onChange={e=>setNewsForm({...newsForm,body:e.target.value})}/>
+              </div>
+              <div style={{display:"flex",gap:10,marginTop:4}}>
+                <button className="btn btn-ghost" style={{flex:1}} onClick={()=>setShowNewsModal(false)}>Abbrechen</button>
+                <button className="btn btn-primary" style={{flex:2}} onClick={saveNews} disabled={!newsForm.title||!newsForm.body}>{editingNews?"✓ Speichern":"📢 Veröffentlichen"}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ════ TEAM MODAL ════ */}
+      {showTeamModal&&(
+        <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&setShowTeamModal(false)}>
+          <div className="modal">
+            <div style={{height:4,background:`linear-gradient(90deg,${B.green},${B.teal})`,borderRadius:"4px 4px 0 0",margin:"-30px -30px 22px"}}/>
+            <h2 style={{fontSize:22,fontWeight:900,letterSpacing:1,textTransform:"uppercase",marginBottom:20}}>{editingTeam?"Mannschaft bearbeiten":"Neue Mannschaft"}</h2>
+            <div style={{display:"flex",flexDirection:"column",gap:13}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                <div><label style={LBL}>Name *</label>
+                  <input className="input" placeholder="z.B. G-Jugend" value={teamForm.name} onChange={e=>setTeamForm({...teamForm,name:e.target.value})}/>
+                </div>
+                <div><label style={LBL}>Jahrgang</label>
+                  <input className="input" placeholder="z.B. 2021/2022" value={teamForm.jahrgang} onChange={e=>setTeamForm({...teamForm,jahrgang:e.target.value})}/>
+                </div>
+              </div>
+              <div><label style={LBL}>Trainer</label>
+                <input className="input" placeholder="z.B. Hans Mustermann" value={teamForm.trainer} onChange={e=>setTeamForm({...teamForm,trainer:e.target.value})}/>
+              </div>
+              <div><label style={LBL}>Trainingszeiten</label>
+                <input className="input" placeholder="z.B. Di & Do 17:00 Uhr" value={teamForm.training} onChange={e=>setTeamForm({...teamForm,training:e.target.value})}/>
+              </div>
+              <div style={{display:"flex",gap:10,marginTop:4}}>
+                <button className="btn btn-ghost" style={{flex:1}} onClick={()=>setShowTeamModal(false)}>Abbrechen</button>
+                <button className="btn btn-primary" style={{flex:2}} onClick={saveTeam} disabled={!teamForm.name}>{editingTeam?"✓ Speichern":"+ Erstellen"}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ════ NEW THREAD MODAL ════ */}
+      {showNewThread&&(
+        <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&setShowNewThread(false)}>
+          <div className="modal" style={{maxWidth:420}}>
+            <div style={{height:4,background:`linear-gradient(90deg,${B.teal},${B.tealDark})`,borderRadius:"4px 4px 0 0",margin:"-30px -30px 22px"}}/>
+            <h2 style={{fontSize:22,fontWeight:900,letterSpacing:1,textTransform:"uppercase",marginBottom:18}}>Neuer Chat</h2>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:16}}>
+              {[["group","👥 Gruppen-Chat"],["direct","👤 Direktnachricht"]].map(([type,label])=>(
+                <button key={type} onClick={()=>setNewThreadType(type)}
+                  style={{border:`2px solid ${newThreadType===type?B.teal:B.lightGrey}`,background:newThreadType===type?B.tealLight:B.white,color:newThreadType===type?B.teal:B.midGrey,borderRadius:8,padding:10,cursor:"pointer",fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:13,transition:"all .15s"}}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            {newThreadType==="group"
+              ? <div><label style={LBL}>Mannschaft</label>
+                  <select className="input" value={newThreadTeam} onChange={e=>setNewThreadTeam(e.target.value)}>
+                    {teams.map(t=><option key={t.id} value={t.name}>{t.name}</option>)}
+                  </select>
+                </div>
+              : <div><label style={LBL}>Empfänger</label>
+                  <input className="input" placeholder="z.B. Max Mustermann" value={newThreadName} onChange={e=>setNewThreadName(e.target.value)}/>
+                </div>
+            }
+            <div style={{display:"flex",gap:10,marginTop:16}}>
+              <button className="btn btn-ghost" style={{flex:1}} onClick={()=>setShowNewThread(false)}>Abbrechen</button>
+              <button className="btn btn-primary" style={{flex:2}} onClick={createThread} disabled={newThreadType==="group"?!newThreadTeam:!newThreadName.trim()}>Chat starten</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
