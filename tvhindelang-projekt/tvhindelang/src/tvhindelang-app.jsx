@@ -64,7 +64,7 @@ const INIT_TEAMS = [
 
 const INIT_INTRO = "Die Fußballabteilung des TV Hindelang e.V. vereint 16 aktive Mannschaften – von den Bambini bis zu den Senioren und der Alten Herren. Hier findet ihr alle Termine, Spielpläne, Mannschaftsinfos und Vereinsnews an einem Ort.";
 
-const emptyEvent = (date="") => ({ type:"training", title:"", date, time:"17:00", location:"", notes:"", team:"Herren", bus1:false, bus2:false });
+const emptyEvent = (date="") => ({ type:"training", title:"", date, time:"17:00", endTime:"", location:"", notes:"", team:"Herren", bus1:false, bus2:false });
 
 const LBL = { fontSize:11, fontWeight:700, letterSpacing:1, color:B.midGrey, textTransform:"uppercase", display:"block", marginBottom:5 };
 
