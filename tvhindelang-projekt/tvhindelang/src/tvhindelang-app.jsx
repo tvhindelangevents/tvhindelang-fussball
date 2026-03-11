@@ -126,10 +126,16 @@ export default function TVHindelangApp() {
   const [showTeamModal, setShowTeamModal]   = useState(false);
   const [editingTeam, setEditingTeam]       = useState(null);
   const [teamForm, setTeamForm]             = useState({ name:"", trainer:"", training:"", jahrgang:"" });
+  
   const [showNewThread, setShowNewThread]   = useState(false);
   const [newThreadType, setNewThreadType]   = useState("group");
   const [newThreadTeam, setNewThreadTeam]   = useState("Herren");
   const [newThreadName, setNewThreadName]   = useState("");
+
+  // NEU: User-Manager Modals
+  const [showUserModal, setShowUserModal]   = useState(false);
+  const [editingUser, setEditingUser]       = useState(null);
+  const [userForm, setUserForm]             = useState({ name: "", role: "player" });
 
   // ── Messages ──
   const [activeThread, setActiveThread] = useState(null);
@@ -185,7 +191,7 @@ export default function TVHindelangApp() {
     unsubs.push(onSnapshot(collection(db,"threads"), snap => {
       setThreads(snap.docs.map(d=>({id:d.id,...d.data(),messages:d.data().messages||[]})));
     }));
-    // all users (NEU: robusteres Laden für das Dropdown)
+    // all users 
     unsubs.push(onSnapshot(collection(db,"users"), 
       snap => {
         setAllUsers(snap.docs.map(d=>({id:d.id,...d.data()})));
@@ -293,6 +299,22 @@ export default function TVHindelangApp() {
     setShowTeamModal(false);
   };
   const deleteTeam = async (id) => { await deleteDoc(doc(db,"teams",id)); };
+
+  // ── User CRUD ────────────────────────────────────────────
+  const openEditUser = (u) => {
+    setEditingUser(u);
+    setUserForm({ name: u.name || "", role: u.role || "player" });
+    setShowUserModal(true);
+  };
+  const saveUser = async () => {
+    if (!editingUser) return;
+    // SetDoc mit merge:true oder updateDoc stellen sicher, dass wir nur updaten
+    await updateDoc(doc(db, "users", editingUser.id), {
+      name: userForm.name,
+      role: userForm.role
+    });
+    setShowUserModal(false);
+  };
 
   // ── Intro text ───────────────────────────────────────────
   const saveIntro = async (text) => {
@@ -792,7 +814,8 @@ export default function TVHindelangApp() {
               </div>
             </div>
             <div style={{display:"flex",borderBottom:`1.5px solid ${B.lightGrey}`,marginBottom:24,marginTop:16,background:B.white,borderRadius:"8px 8px 0 0",overflow:"hidden"}}>
-              {[["teams","👥 Mannschaften"],["events","📅 Termine"],["news","📢 News"],["intro","🏠 Starttext"]].map(([id,label])=>(
+              {/* NEUER TAB FÜR BENUTZER HINZUGEFÜGT */}
+              {[["teams","👥 Mannschaften"],["events","📅 Termine"],["news","📢 News"],["users", "👤 Benutzer"],["intro","🏠 Starttext"]].map(([id,label])=>(
                 <button key={id} className={`admin-tab ${adminSection===id?"active":""}`} onClick={()=>setAdminSection(id)}>{label}</button>
               ))}
             </div>
@@ -879,6 +902,31 @@ export default function TVHindelangApp() {
                           <button className="btn btn-edit" onClick={()=>openEditNews(n)}>✏️</button>
                           <button className="btn btn-danger" onClick={()=>deleteNews(n.id)}>🗑️</button>
                         </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* NEU: Benutzerverwaltung Content */}
+            {adminSection==="users"&&(
+              <div>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+                  <div style={{fontSize:16,fontWeight:800,letterSpacing:1,textTransform:"uppercase"}}>Benutzer ({allUsers.length})</div>
+                </div>
+                <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                  {allUsers.map(u=>(
+                    <div key={u.id} className="card" style={{display:"grid",gridTemplateColumns:"1fr 1fr 120px auto",gap:16,alignItems:"center",padding:"14px 18px"}}>
+                      <div style={{fontWeight:800,fontSize:16}}>{u.name || <span style={{color:B.midGrey,fontStyle:"italic"}}>Kein Name vergeben</span>}</div>
+                      <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif"}}>✉️ {u.email || u.id}</div>
+                      <div>
+                        <Chip bg={u.role==="admin"?B.amberLight:B.tealLight} c={u.role==="admin"?B.amber:B.teal}>
+                          {u.role==="admin"?"Admin":"Spieler"}
+                        </Chip>
+                      </div>
+                      <div style={{display:"flex",gap:6}}>
+                        <button className="btn btn-edit" onClick={()=>openEditUser(u)}>✏️ Bearbeiten</button>
                       </div>
                     </div>
                   ))}
@@ -1045,6 +1093,33 @@ export default function TVHindelangApp() {
         </div>
       )}
 
+      {/* ════ USER MODAL (NEU) ════ */}
+      {showUserModal&&(
+        <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&setShowUserModal(false)}>
+          <div className="modal" style={{maxWidth:420}}>
+            <div style={{height:4,background:`linear-gradient(90deg,${B.amber},${B.teal})`,borderRadius:"4px 4px 0 0",margin:"-30px -30px 22px"}}/>
+            <h2 style={{fontSize:22,fontWeight:900,letterSpacing:1,textTransform:"uppercase",marginBottom:20}}>Benutzer bearbeiten</h2>
+            <div style={{display:"flex",flexDirection:"column",gap:13}}>
+              <div>
+                <label style={LBL}>Anzeigename</label>
+                <input className="input" placeholder="z.B. Max Mustermann" value={userForm.name} onChange={e=>setUserForm({...userForm,name:e.target.value})}/>
+              </div>
+              <div>
+                <label style={LBL}>Rolle</label>
+                <select className="input" value={userForm.role} onChange={e=>setUserForm({...userForm,role:e.target.value})}>
+                  <option value="player">Spieler / Normal</option>
+                  <option value="admin">Administrator</option>
+                </select>
+              </div>
+              <div style={{display:"flex",gap:10,marginTop:12}}>
+                <button className="btn btn-ghost" style={{flex:1}} onClick={()=>setShowUserModal(false)}>Abbrechen</button>
+                <button className="btn btn-primary" style={{flex:2}} onClick={saveUser}>✓ Speichern</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ════ NEW THREAD MODAL ════ */}
       {showNewThread&&(
         <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&setShowNewThread(false)}>
@@ -1070,7 +1145,6 @@ export default function TVHindelangApp() {
                     <select className="input" value={newThreadName} onChange={e=>setNewThreadName(e.target.value)}>
                       <option value="">Bitte wählen...</option>
                       {allUsers.map(u => {
-                        // Fallback, falls kein Name oder keine Email vergeben wurde
                         const displayName = u.name || u.email || `Benutzer (${u.id.substring(0,6)})`;
                         return (
                           <option key={u.id} value={displayName}>
