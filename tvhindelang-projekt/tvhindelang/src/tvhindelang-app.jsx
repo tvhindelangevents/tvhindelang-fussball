@@ -53,29 +53,12 @@ const DAYS   = ["Mo","Di","Mi","Do","Fr","Sa","So"];
 const MONTHS = ["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
 const typeOf = (v) => EVENT_TYPES.find(t=>t.value===v)||EVENT_TYPES[3];
 
-const INIT_TEAMS = [
-  { id:"ah",    name:"AH",         trainer:"N.N.", training:"Freitag 19:30 Uhr",  jahrgang:"Ü32"       },
-  { id:"herren",name:"Herren",     trainer:"N.N.", training:"Di & Do 19:00 Uhr",  jahrgang:"Senioren"  },
-  { id:"a",     name:"A-Jugend",   trainer:"N.N.", training:"Di & Do 17:30 Uhr",  jahrgang:"2007/2008" },
-  { id:"b1",    name:"B-Jugend 1", trainer:"N.N.", training:"Mo & Mi 17:00 Uhr",  jahrgang:"2009/2010" },
-  { id:"b2",    name:"B-Jugend 2", trainer:"N.N.", training:"Mo & Mi 17:00 Uhr",  jahrgang:"2009/2010" },
-  { id:"c1",    name:"C1",         trainer:"N.N.", training:"Di & Do 16:30 Uhr",  jahrgang:"2011/2012" },
-  { id:"c2",    name:"C2",         trainer:"N.N.", training:"Di & Do 16:30 Uhr",  jahrgang:"2011/2012" },
-  { id:"d1",    name:"D1",         trainer:"N.N.", training:"Mi 16:00 Uhr",       jahrgang:"2013/2014" },
-  { id:"d2",    name:"D2",         trainer:"N.N.", training:"Mi 16:00 Uhr",       jahrgang:"2013/2014" },
-  { id:"e1",    name:"E1",         trainer:"N.N.", training:"Di 15:30 Uhr",       jahrgang:"2015/2016" },
-  { id:"e2",    name:"E2",         trainer:"N.N.", training:"Di 15:30 Uhr",       jahrgang:"2015/2016" },
-  { id:"e3",    name:"E3",         trainer:"N.N.", training:"Di 15:30 Uhr",       jahrgang:"2015/2016" },
-  { id:"f1",    name:"F1",         trainer:"N.N.", training:"Sa 10:00 Uhr",       jahrgang:"2017/2018" },
-  { id:"f2",    name:"F2",         trainer:"N.N.", training:"Sa 10:00 Uhr",       jahrgang:"2017/2018" },
-  { id:"f3",    name:"F3",         trainer:"N.N.", training:"Sa 10:00 Uhr",       jahrgang:"2017/2018" },
-  { id:"bam",   name:"Bambini",    trainer:"N.N.", training:"Sa 09:00 Uhr",       jahrgang:"2019+"     },
-];
+// Wird nur beim allerersten Laden genutzt, danach überschreibt die Datenbank dies
+const INIT_TEAMS = []; 
 
-const INIT_INTRO = "Die Fußballabteilung des TV Hindelang e.V. vereint 16 aktive Mannschaften – von den Bambini bis zu den Senioren und der Alten Herren. Hier findet ihr alle Termine, Spielpläne, Mannschaftsinfos und Vereinsnews an einem Ort.";
+const INIT_INTRO = "Die Fußballabteilung des TV Hindelang e.V. vereint alle aktiven Mannschaften. Hier findet ihr Termine, Spielpläne und Vereinsnews an einem Ort.";
 
 const emptyEvent = (date="") => ({ type:"training", title:"", date, time:"17:00", endTime:"", location:"", notes:"", team:"Herren", bus1:false, bus2:false });
-
 const LBL = { fontSize:11, fontWeight:700, letterSpacing:1, color:B.midGrey, textTransform:"uppercase", display:"block", marginBottom:5 };
 
 const PineLogo = ({ size=36 }) => (
@@ -96,7 +79,6 @@ export default function TVHindelangApp() {
   const [user, setUser]           = useState(null);  
   const [userRole, setUserRole]   = useState(null);  
   const [authLoading, setAuthLoading] = useState(true);
-  const [showLogin, setShowLogin] = useState(false);
   const [loginEmail, setLoginEmail]   = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError]   = useState("");
@@ -138,7 +120,6 @@ export default function TVHindelangApp() {
   const [newThreadTeam, setNewThreadTeam]   = useState("Herren");
   const [newThreadName, setNewThreadName]   = useState("");
 
-  // User-Manager Modals
   const [showUserModal, setShowUserModal]   = useState(false);
   const [editingUser, setEditingUser]       = useState(null);
   const [userForm, setUserForm]             = useState({ name: "", email: "", password: "", role: "player" });
@@ -153,9 +134,9 @@ export default function TVHindelangApp() {
   // ── ROLES & PERMISSIONS ──
   const isAdmin = userRole === "admin";
   const isTrainer = userRole === "trainer";
-  const canAccessAdmin = isAdmin || isTrainer; // Beide dürfen den Admin-Bereich betreten
-  const canEditEvents = isAdmin || isTrainer;  // Termine anlegen/bearbeiten/löschen
-  const canEditNews = isAdmin || isTrainer;    // News anlegen/bearbeiten/löschen
+  const canAccessAdmin = isAdmin || isTrainer; 
+  const canEditEvents = isAdmin || isTrainer;  
+  const canEditNews = isAdmin || isTrainer;    
 
   const year  = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -170,8 +151,7 @@ export default function TVHindelangApp() {
       if (firebaseUser) {
         setUser(firebaseUser);
         try {
-          const { getDoc, doc: docRef } = await import("firebase/firestore");
-          const snap = await getDoc(docRef(db, "users", firebaseUser.uid));
+          const snap = await getDoc(doc(db, "users", firebaseUser.uid));
           if (snap.exists()) setUserRole(snap.data().role || "player");
           else setUserRole("player");
         } catch { setUserRole("player"); }
@@ -192,9 +172,12 @@ export default function TVHindelangApp() {
     unsubs.push(onSnapshot(query(collection(db,"events"), orderBy("date")), snap => {
       setEvents(snap.docs.map(d=>({id:d.id,...d.data()})));
     }));
+    
+    // HIER WURDE DER FEHLER BEHOBEN: Kein if (!snap.empty) mehr!
     unsubs.push(onSnapshot(collection(db,"teams"), snap => {
-      if (!snap.empty) setTeams(snap.docs.map(d=>({id:d.id,...d.data()})));
+      setTeams(snap.docs.map(d=>({id:d.id,...d.data()})));
     }));
+    
     unsubs.push(onSnapshot(query(collection(db,"news"), orderBy("date","desc")), snap => {
       setNews(snap.docs.map(d=>({id:d.id,...d.data()})));
     }));
@@ -202,10 +185,8 @@ export default function TVHindelangApp() {
       setThreads(snap.docs.map(d=>({id:d.id,...d.data(),messages:d.data().messages||[]})));
     }));
     unsubs.push(onSnapshot(collection(db,"users"), 
-      snap => {
-        setAllUsers(snap.docs.map(d=>({id:d.id,...d.data()})));
-      },
-      error => console.error("Firebase Fehler beim Laden der Benutzer:", error)
+      snap => setAllUsers(snap.docs.map(d=>({id:d.id,...d.data()}))),
+      error => console.error("Fehler beim Laden der Benutzer:", error)
     ));
     unsubs.push(onSnapshot(doc(db,"settings","intro"), snap => {
       if (snap.exists()) setIntroText(snap.data().text || INIT_INTRO);
@@ -222,7 +203,7 @@ export default function TVHindelangApp() {
     setLoginLoading(true); setLoginError("");
     try {
       await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
-      setShowLogin(false); setLoginEmail(""); setLoginPassword("");
+      setLoginEmail(""); setLoginPassword("");
     } catch (e) {
       setLoginError("Falsche E-Mail oder falsches Passwort.");
     }
@@ -330,7 +311,6 @@ export default function TVHindelangApp() {
       }
       setShowUserModal(false);
     } catch (err) {
-      console.error(err);
       if (err.code === 'auth/email-already-in-use') setUserError("Diese E-Mail ist bereits registriert.");
       else if (err.code === 'auth/weak-password') setUserError("Das Passwort muss mindestens 6 Zeichen lang sein.");
       else setUserError("Fehler: " + err.message);
@@ -345,7 +325,10 @@ export default function TVHindelangApp() {
   // ── Messages ─────────────────────────────────────────────
   const sendMessage = async () => {
     if (!chatInput.trim()||!activeThread) return;
-    const msg = { from: user?.email||"Benutzer", text:chatInput, time: new Date().toLocaleTimeString("de",{hour:"2-digit",minute:"2-digit"}) };
+    const myProfile = allUsers.find(u => u.id === user.uid);
+    const senderName = myProfile?.name || user.email;
+
+    const msg = { from: senderName, text:chatInput, time: new Date().toLocaleTimeString("de",{hour:"2-digit",minute:"2-digit"}) };
     const updated = [...(activeThread.messages||[]), msg];
     await updateDoc(doc(db,"threads",activeThread.id), { messages: updated });
     setActiveThread({...activeThread, messages: updated});
@@ -405,18 +388,16 @@ export default function TVHindelangApp() {
     );
   };
 
-  // ── Helper für Admin Tabs ──
   const getAdminTabs = () => {
     const tabs = [];
     if (isAdmin) tabs.push({ id: "teams", label: "👥 Mannschaften" });
-    if (isAdmin || isTrainer) tabs.push({ id: "events", label: "📅 Termine" });
-    if (isAdmin || isTrainer) tabs.push({ id: "news", label: "📢 News" });
+    if (canEditEvents) tabs.push({ id: "events", label: "📅 Termine" });
+    if (canEditNews) tabs.push({ id: "news", label: "📢 News" });
     if (isAdmin) tabs.push({ id: "users", label: "👤 Benutzer" });
     if (isAdmin) tabs.push({ id: "intro", label: "🏠 Starttext" });
     return tabs;
   };
 
-  // ── Loading / Auth screens ────────────────────────────────
   if (authLoading) return (
     <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:B.offWhite,flexDirection:"column",gap:16}}>
       <PineLogo size={52}/>
@@ -434,29 +415,15 @@ export default function TVHindelangApp() {
           <div style={{fontSize:13,color:B.midGrey,fontWeight:700,letterSpacing:2,textTransform:"uppercase"}}>Fussball</div>
         </div>
         <div style={{display:"flex",flexDirection:"column",gap:12}}>
-          <div>
-            <label style={LBL}>E-Mail</label>
-            <input className="input" type="email" placeholder="deine@email.de" value={loginEmail}
-              onChange={e=>setLoginEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleLogin()}/>
-          </div>
-          <div>
-            <label style={LBL}>Passwort</label>
-            <input className="input" type="password" placeholder="••••••••" value={loginPassword}
-              onChange={e=>setLoginPassword(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleLogin()}/>
-          </div>
+          <div><label style={LBL}>E-Mail</label><input className="input" type="email" placeholder="deine@email.de" value={loginEmail} onChange={e=>setLoginEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleLogin()}/></div>
+          <div><label style={LBL}>Passwort</label><input className="input" type="password" placeholder="••••••••" value={loginPassword} onChange={e=>setLoginPassword(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleLogin()}/></div>
           {loginError&&<div style={{color:B.red,fontSize:13,fontFamily:"'Barlow',sans-serif"}}>❌ {loginError}</div>}
-          <button className="btn btn-primary" style={{marginTop:4}} onClick={handleLogin} disabled={loginLoading||!loginEmail||!loginPassword}>
-            {loginLoading?"Wird eingeloggt…":"Einloggen"}
-          </button>
-        </div>
-        <div style={{marginTop:20,fontSize:12,color:B.midGrey,fontFamily:"'Barlow',sans-serif",textAlign:"center",lineHeight:1.5}}>
-          Kein Konto? Bitte den Administrator kontaktieren.
+          <button className="btn btn-primary" style={{marginTop:4}} onClick={handleLogin} disabled={loginLoading||!loginEmail||!loginPassword}>{loginLoading?"Wird eingeloggt…":"Einloggen"}</button>
         </div>
       </div>
     </div>
   );
 
-  // ══════════════════════════════════════════════
   return (
     <div style={{fontFamily:"'Barlow Condensed','Arial Narrow',sans-serif",background:B.offWhite,minHeight:"100vh",color:B.anthracite,display:"flex",flexDirection:"column"}}>
       <style>{`
@@ -795,7 +762,6 @@ export default function TVHindelangApp() {
                   );
                 })}
               </div>
-              {/* ALLE dürfen jetzt neue Chats anlegen */}
               <div style={{padding:"12px 14px",borderTop:`1.5px solid ${B.lightGrey}`,background:B.white,flexShrink:0}}>
                 <button className="btn btn-primary" style={{width:"100%",fontSize:12,padding:9}} onClick={()=>setShowNewThread(true)}>+ Neuer Chat</button>
               </div>
@@ -814,7 +780,8 @@ export default function TVHindelangApp() {
                 <div style={{flex:1,overflow:"auto",padding:20,display:"flex",flexDirection:"column",gap:10,background:B.offWhite}}>
                   {(!activeThread.messages||activeThread.messages.length===0)&&<div style={{textAlign:"center",color:B.midGrey,padding:"40px 0",fontSize:14}}>Noch keine Nachrichten</div>}
                   {activeThread.messages?.map((msg,i)=>{
-                    const isMe=msg.from===user?.email;
+                    const myProfile = allUsers.find(u => u.id === user.uid);
+                    const isMe = msg.from === (myProfile?.name || user.email);
                     return (
                       <div key={i} style={{display:"flex",flexDirection:"column",alignItems:isMe?"flex-end":"flex-start"}}>
                         {!isMe&&<div style={{fontSize:11,color:B.midGrey,marginBottom:2,fontWeight:600}}>{msg.from}</div>}
@@ -865,6 +832,7 @@ export default function TVHindelangApp() {
                   <button className="btn btn-primary" onClick={openAddTeam}>+ Mannschaft hinzufügen</button>
                 </div>
                 <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                  {teams.length === 0 && <div style={{color:B.midGrey, fontSize:14}}>Keine Mannschaften gefunden. Leg eine neue an!</div>}
                   {teams.map(t=>(
                     <div key={t.id} className="card" style={{display:"grid",gridTemplateColumns:"160px 1fr 1fr 1fr auto",gap:16,alignItems:"center",padding:"14px 18px"}}>
                       <div style={{fontWeight:800,fontSize:16}}>{t.name}</div>
@@ -947,7 +915,6 @@ export default function TVHindelangApp() {
               </div>
             )}
 
-            {/* Benutzerverwaltung Content */}
             {adminSection==="users"&&isAdmin&&(
               <div>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
