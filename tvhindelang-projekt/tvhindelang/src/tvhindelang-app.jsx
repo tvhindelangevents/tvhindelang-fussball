@@ -78,7 +78,7 @@ const getTrainerNames = (team) => {
   return team.trainer || "N.N.";
 };
 
-// SICHERHEITS-HELFER FÜR DATUMSFORMATIERUNG (Verhindert White Screen of Death)
+// SICHERHEITS-HELFER FÜR DATUMSFORMATIERUNG IM ADMIN BEREICH
 const safeDateObj = (dateString) => {
   if (!dateString) return { day: "?", month: "???", year: "????" };
   const d = new Date(dateString);
@@ -257,7 +257,7 @@ export default function TVHindelangApp() {
 
   const handleLogout = async () => { await signOut(auth); setView("home"); };
 
-  // ── CSV IMPORT LOGIK (ABSTURZSICHER) ────────────────────────
+  // ── CSV IMPORT LOGIK (KUGELSICHER) ────────────────────────
   const handleCSVUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -285,10 +285,10 @@ export default function TVHindelangApp() {
         headers.forEach((header, index) => { row[header] = values[index] || ""; });
 
         const dateKey = headers.find(h => h.includes("datum") || h === "date" || h === "tag");
-        const timeKey = headers.find(h => h.includes("zeit") || h.includes("anstoß") || h === "time" || h.includes("uhr"));
+        const timeKey = headers.find(h => h.includes("zeit") || h.includes("anstoß") || h === "time" || h.includes("uhr") || h === "beginn");
         const heimKey = headers.find(h => h.includes("heim") || h.includes("team"));
         const gastKey = headers.find(h => h.includes("gast") || h.includes("gegner"));
-        const ortKey = headers.find(h => h.includes("ort") || h.includes("stätte"));
+        const ortKey = headers.find(h => h.includes("ort") || h.includes("stätte") || h.includes("platz"));
         const spielKey = headers.find(h => h.includes("spiel") || h.includes("begegnung")); 
 
         let rawDate = dateKey ? row[dateKey] : "";
@@ -307,31 +307,45 @@ export default function TVHindelangApp() {
             }
         }
 
-        if (!rawDate || !heim) continue; 
+        if (!rawDate || (!heim && !gast)) continue; 
 
-        // Datum konvertieren: DD.MM.YYYY zu YYYY-MM-DD
-        let formattedDate = rawDate;
-        if (rawDate.match(/^\d{1,2}\.\d{1,2}\.\d{2,4}/)) {
-          const parts = rawDate.split(".");
-          let year = parts[2].length === 2 ? '20' + parts[2] : parts[2];
-          formattedDate = `${year}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`;
-        }
+        // DATUM KONVERTIEREN (Absturzsicher)
+        let formattedDate = "";
+        const deMatch = rawDate.match(/(\d{1,2})\.(\d{1,2})\.?(\d{2,4})?/); // Sucht nach 07.03. oder 07.03.2026
+        const isoMatch = rawDate.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);      // Sucht nach 2026-03-07
         
-        // SCHUTZ: Wenn das Datum kaputt ist (z.B. "Spielfrei"), überspringen wir die Zeile!
-        if (isNaN(new Date(formattedDate).getTime())) continue;
+        if (isoMatch) {
+           formattedDate = `${isoMatch[1]}-${isoMatch[2].padStart(2,'0')}-${isoMatch[3].padStart(2,'0')}`;
+        } else if (deMatch) {
+           let d = deMatch[1].padStart(2, '0');
+           let m = deMatch[2].padStart(2, '0');
+           // Wenn kein Jahr angegeben ist, nimm das aktuelle Jahr
+           let y = deMatch[3] ? (deMatch[3].length === 2 ? '20' + deMatch[3] : deMatch[3]) : new Date().getFullYear().toString();
+           formattedDate = `${y}-${m}-${d}`;
+        } else {
+           continue; // Wenn absolut kein Datum erkannt wird (z.B. Text "Spielfrei"), überspringen wir die Zeile!
+        }
 
-        let formattedTime = (rawTime || "").replace(".", ":").substring(0, 5);
-        if (!formattedTime.match(/^\d{2}:\d{2}$/)) formattedTime = "12:00"; // Fallback für kaputte Uhrzeiten
+        // UHRZEIT KONVERTIEREN
+        let formattedTime = "12:00"; 
+        if (rawTime) {
+            let tClean = rawTime.replace(".", ":").trim();
+            const tMatch = tClean.match(/(\d{1,2}):(\d{2})/);
+            if (tMatch) formattedTime = `${tMatch[1].padStart(2, '0')}:${tMatch[2]}`;
+        }
 
         let title = `${heim} vs. ${gast}`;
         let teamName = heim; 
         
-        if (heim.toLowerCase().includes("hindelang") || heim.toLowerCase().includes("tvh")) {
+        if (heim.toLowerCase().includes("hindelang") || heim.toLowerCase().includes("tvh") || heim.toLowerCase().includes("tv ")) {
           title = `Heimspiel vs. ${gast}`;
           teamName = heim;
-        } else if (gast.toLowerCase().includes("hindelang") || gast.toLowerCase().includes("tvh")) {
-          title = `Auswärtsspiel bei ${heim}`;
+        } else if (gast.toLowerCase().includes("hindelang") || gast.toLowerCase().includes("tvh") || gast.toLowerCase().includes("tv ")) {
+          title = `Auswärts bei ${heim}`;
           teamName = gast;
+        } else {
+          title = `${heim} vs. ${gast}`;
+          teamName = "Herren"; 
         }
 
         const newEvent = {
@@ -340,8 +354,8 @@ export default function TVHindelangApp() {
           date: formattedDate,
           time: formattedTime,
           endTime: "",
-          location: ort,
-          notes: "Automatisch importiert",
+          location: ort || "Spielort",
+          notes: "Importiert",
           team: teamName,
           bus1: false,
           bus2: false,
@@ -478,29 +492,46 @@ export default function TVHindelangApp() {
     }
   };
 
-  // ── User CRUD ────────────────────────────────────────────
+  // ── User CRUD (Admin Area) ───────────────────────────────
   const openAddUser = () => {
     setEditingUser(null);
     setUserError("");
     setUserForm({ name: "", email: "", password: "", role: "player" });
     setShowUserModal(true);
   };
+  
   const openEditUser = (u) => {
     setEditingUser(u);
     setUserError("");
     setUserForm({ name: u.name || "", email: u.email || "", password: "", role: u.role || "player" });
     setShowUserModal(true);
   };
+
   const saveUser = async () => {
-    setUserError(""); setUserSaving(true);
+    setUserError("");
+    setUserSaving(true);
+    
     try {
       if (editingUser) {
-        await updateDoc(doc(db, "users", editingUser.id), { name: userForm.name, role: userForm.role });
+        await updateDoc(doc(db, "users", editingUser.id), {
+          name: userForm.name,
+          role: userForm.role
+        });
       } else {
-        if (!userForm.email || !userForm.password) { setUserError("E-Mail und Passwort sind Pflichtfelder für neue Nutzer."); setUserSaving(false); return; }
+        if (!userForm.email || !userForm.password) {
+          setUserError("E-Mail und Passwort sind Pflichtfelder für neue Nutzer.");
+          setUserSaving(false);
+          return;
+        }
         const userCredential = await createUserWithEmailAndPassword(secondaryAuth, userForm.email, userForm.password);
         const newUid = userCredential.user.uid;
-        await setDoc(doc(db, "users", newUid), { email: userForm.email, name: userForm.name, role: userForm.role, createdAt: serverTimestamp() });
+        
+        await setDoc(doc(db, "users", newUid), {
+          email: userForm.email,
+          name: userForm.name,
+          role: userForm.role,
+          createdAt: serverTimestamp()
+        });
         await signOut(secondaryAuth);
       }
       setShowUserModal(false);
@@ -509,14 +540,17 @@ export default function TVHindelangApp() {
       else if (err.code === 'auth/weak-password') setUserError("Das Passwort muss mindestens 6 Zeichen lang sein.");
       else setUserError("Fehler: " + err.message);
     }
+    
     setUserSaving(false);
   };
+
   const deleteUser = async (id) => {
     if (window.confirm("Möchtest du diesen Benutzer unwiderruflich aus der App entfernen?")) {
       await deleteDoc(doc(db,"users",id));
     }
   };
 
+  // ── Intro text ───────────────────────────────────────────
   const saveIntro = async (text) => { await setDoc(doc(db,"settings","intro"), { text }); };
 
   // ── Messages ─────────────────────────────────────────────
@@ -524,6 +558,7 @@ export default function TVHindelangApp() {
     if (!chatInput.trim()||!activeThread) return;
     const myProfile = allUsers.find(u => u.id === user.uid);
     const senderName = myProfile?.name || user.email;
+
     const msg = { from: senderName, text:chatInput, time: new Date().toLocaleTimeString("de",{hour:"2-digit",minute:"2-digit"}) };
     const updated = [...(activeThread.messages||[]), msg];
     await updateDoc(doc(db,"threads",activeThread.id), { messages: updated });
@@ -537,14 +572,12 @@ export default function TVHindelangApp() {
     setShowNewThread(false); setNewThreadName("");
   };
 
-  // ── Sortierung & Helpers ─────────────────────────────────────
+  // ── Calendar helpers ─────────────────────────────────────
   const matchesFilter = (ev) => filterTeam==="Alle Mannschaften"||ev.team===filterTeam||ev.team==="Alle Mannschaften";
   const getDay = (day) => {
     const d=`${year}-${String(month+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
     return events.filter(e=>e.date===d&&matchesFilter(e));
   };
-  
-  // Abgesicherte Sortierung, um leere Datumsfelder aufzufangen
   const selectedStr = selectedDay ? `${year}-${String(month+1).padStart(2,"0")}-${String(selectedDay).padStart(2,"0")}` : "";
   const selectedEvs = selectedDay ? events.filter(e=>e.date===selectedStr&&matchesFilter(e)).sort((a,b)=>(a.time||"").localeCompare(b.time||"")) : [];
   const upcoming    = [...events].filter(e=>(e.date||"")>=todayStr&&matchesFilter(e)).sort((a,b)=>(a.date||"").localeCompare(b.date||"")||(a.time||"").localeCompare(b.time||"")).slice(0,10);
@@ -1242,7 +1275,7 @@ export default function TVHindelangApp() {
                           <Chip bg={rc.bg} c={rc.c}>{getRoleLabel(u.role)}</Chip>
                         </div>
                         <div style={{display:"flex",gap:6}}>
-                          <button className="btn btn-edit" onClick={()=>openEditUser(u)}>✏️</button>
+                          <button className="btn btn-edit" onClick={()=>openEditUser(u)}>✏️ Bearbeiten</button>
                           <button className="btn btn-danger" onClick={()=>deleteUser(u.id)}>🗑️</button>
                         </div>
                       </div>
