@@ -520,11 +520,9 @@ export default function TVHindelangApp() {
 
   const saveIntro = async (text) => { await setDoc(doc(db,"settings","intro"), { text }); };
 
-  // ── NEUE CHAT & BENACHRICHTIGUNGS-LOGIK ──
   const openChat = async (th) => {
     setActiveThread(th);
     if (user) {
-      // Setze Zeitstempel für "Gelesen" beim Öffnen
       await updateDoc(doc(db, "threads", th.id), { [`readReceipts.${user.uid}`]: Date.now() });
     }
   };
@@ -537,11 +535,10 @@ export default function TVHindelangApp() {
       from: senderName, 
       text: chatInput, 
       time: new Date().toLocaleTimeString("de",{hour:"2-digit",minute:"2-digit"}),
-      timestamp: Date.now() // NEU: Zeitstempel für rote Punkte
+      timestamp: Date.now() 
     };
     const updated = [...(activeThread.messages||[]), msg];
     
-    // Nachricht abspeichern UND direkt für mich als gelesen markieren
     await updateDoc(doc(db,"threads",activeThread.id), { 
       messages: updated,
       [`readReceipts.${user.uid}`]: Date.now() 
@@ -572,25 +569,23 @@ export default function TVHindelangApp() {
     setNewThreadRecipientId("");
   };
 
-  // CHECK: Welche Chats darf dieser User sehen?
   const visibleThreads = threads.filter(th => {
     if (th.type === "group") {
-      if (isAdmin) return true; // Admins sehen alle Gruppen
+      if (isAdmin) return true; 
       const myProfile = allUsers.find(u => u.id === user?.uid);
       const myTeams = myProfile?.assignedTeams || [];
-      return myTeams.includes(th.team); // User sieht nur Gruppen seiner zugeteilten Teams
+      return myTeams.includes(th.team); 
     }
     if (th.type === "direct") return th.participants?.includes(user?.uid);
     return false;
   });
 
-  // CHECK: Hat irgendein Chat eine ungelesene Nachricht?
   const checkUnread = (th) => {
     if (!th.messages || th.messages.length === 0) return false;
     const lastMsg = th.messages[th.messages.length - 1];
     const myProfile = allUsers.find(u => u.id === user?.uid);
-    if (lastMsg.from === (myProfile?.name || user?.email)) return false; // Meine eigenen Nachrichten sind nicht "ungelesen"
-    if (!lastMsg.timestamp) return false; // Ignoriere ganz alte Test-Nachrichten ohne Zeitstempel
+    if (lastMsg.from === (myProfile?.name || user?.email)) return false; 
+    if (!lastMsg.timestamp) return false; 
     const myLastRead = th.readReceipts?.[user?.uid] || 0;
     return lastMsg.timestamp > myLastRead;
   };
@@ -624,6 +619,10 @@ export default function TVHindelangApp() {
     const hasDeclined = (ev.declines || []).includes(myName);
     const isNew = ev.createdAt?.toDate ? ev.createdAt.toDate() > new Date(Date.now() - 48 * 60 * 60 * 1000) : false;
 
+    // NEU: Prüfen, ob der Nutzer bei diesem Event überhaupt absagen darf
+    const myTeams = myProfile?.assignedTeams || [];
+    const canDecline = isAdmin || isTrainer || myTeams.includes(ev.team);
+
     return (
       <div style={{borderLeft:`3px solid ${hasBus?BUS.color:t.color}`,background:hasBus?BUS.bg:t.bg,borderRadius:"0 8px 8px 0",padding:"11px 13px",marginBottom:10}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}} className="event-card-inner">
@@ -640,6 +639,7 @@ export default function TVHindelangApp() {
             {ev.location&&<div style={{fontSize:12,color:B.midGrey,marginTop:1}}>📍 {ev.location}</div>}
             {ev.notes&&<div style={{fontSize:12,color:B.charcoal,marginTop:4,fontStyle:"italic",fontFamily:"'Barlow',sans-serif"}}>{ev.notes}</div>}
             
+            {/* DIE TRAINER-ÜBERSICHT (Nur für Admins/Trainer sichtbar) */}
             {canEditEvents && ev.declines && ev.declines.length > 0 && (
               <div style={{marginTop: 8, padding: "6px 8px", background: B.redLight, borderRadius: 6, fontSize: 12, color: B.red, fontFamily:"'Barlow',sans-serif"}}>
                 <strong>❌ {ev.declines.length} Absage(n):</strong> {ev.declines.join(", ")}
@@ -648,10 +648,15 @@ export default function TVHindelangApp() {
           </div>
           
           <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0, alignItems:"flex-end"}} className="event-card-actions">
-            <button className="btn btn-ghost" style={{padding:"5px 10px", fontSize:11, color: hasDeclined ? B.charcoal : B.red, background: hasDeclined ? B.lightGrey : B.redLight}} onClick={(e)=>{e.stopPropagation(); toggleDecline(ev);}}>
-              {hasDeclined ? "✅ Doch dabei" : "❌ Ich fehle"}
-            </button>
+            
+            {/* ABSAGE BUTTON (Nur sichtbar, wenn man im Team ist oder Admin/Trainer ist) */}
+            {canDecline && (
+              <button className="btn btn-ghost" style={{padding:"5px 10px", fontSize:11, color: hasDeclined ? B.charcoal : B.red, background: hasDeclined ? B.lightGrey : B.redLight}} onClick={(e)=>{e.stopPropagation(); toggleDecline(ev);}}>
+                {hasDeclined ? "✅ Doch dabei" : "❌ Ich fehle"}
+              </button>
+            )}
 
+            {/* ADMIN BUTTONS */}
             {canEditEvents&&controls&&(
               <div style={{display:"flex", gap:4, marginTop: 4}} className="event-card-admin-actions">
                 <button className="btn btn-edit" style={{background:"#25D366", color:"white"}} onClick={(e)=>{e.stopPropagation(); shareEventWhatsApp(ev);}} title="In WhatsApp teilen">📲 WA</button>
@@ -665,16 +670,6 @@ export default function TVHindelangApp() {
     );
   };
 
-  const getAdminTabs = () => {
-    const tabs = [];
-    if (isAdmin) tabs.push({ id: "teams", label: "👥 Mannschaften" });
-    if (canEditEvents) tabs.push({ id: "events", label: "📅 Termine" });
-    if (canEditNews) tabs.push({ id: "news", label: "📢 News" });
-    if (isAdmin) tabs.push({ id: "users", label: "👤 Benutzer" });
-    if (isAdmin) tabs.push({ id: "intro", label: "🏠 Startseite" });
-    return tabs;
-  };
-
   if (authLoading) return (
     <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:B.offWhite,flexDirection:"column",gap:16}}>
       <PineLogo size={52}/>
@@ -682,7 +677,6 @@ export default function TVHindelangApp() {
     </div>
   );
 
-  // ─── LOGIN & REGISTER SCREEN ────────────────────────────────────────────────
   if (!user) return (
     <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:B.offWhite,fontFamily:"'Barlow Condensed',sans-serif", padding: 20}}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=Barlow:wght@400;500&display=swap');*{box-sizing:border-box;margin:0;padding:0;}.input{background:#fff;border:1.5px solid ${B.lightGrey};color:${B.anthracite};border-radius:8px;padding:9px 13px;font-family:'Barlow',sans-serif;font-size:14px;width:100%;outline:none;transition:border-color .2s;}.input:focus{border-color:${B.teal};}.btn{border:none;border-radius:7px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:1px;text-transform:uppercase;transition:all .18s;}.btn-primary{background:${B.teal};color:white;padding:10px 22px;font-size:14px;}.btn-primary:hover{background:${B.tealDark};}.btn-primary:disabled{background:${B.lightGrey};color:${B.midGrey};cursor:not-allowed;}`}</style>
