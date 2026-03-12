@@ -1,12 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { initializeApp, getApps, getApp } from "firebase/app";
-import {
-  getFirestore, collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc,
-  onSnapshot, setDoc, serverTimestamp, query, orderBy
-} from "firebase/firestore";
-import {
-  getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword
-} from "firebase/auth";
+import { getFirestore, collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, onSnapshot, setDoc, serverTimestamp, query, orderBy } from "firebase/firestore";
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword } from "firebase/auth";
 
 // ─── FIREBASE ────────────────────────────────────────────────
 const firebaseConfig = {
@@ -31,8 +26,7 @@ const B = {
   teal:"#29B8C8", tealDark:"#1E96A4", tealLight:"#E8F7F9", tealMid:"#B8E8ED",
   anthracite:"#1C1C1C", charcoal:"#2E3A3D", midGrey:"#8A9BA0",
   lightGrey:"#E2EAEC", offWhite:"#F4F7F8", white:"#FFFFFF",
-  red:"#E03E3E", redLight:"#FDEAEA",
-  amber:"#E07A2A", amberLight:"#FEF3E8",
+  red:"#E03E3E", redLight:"#FDEAEA", amber:"#E07A2A", amberLight:"#FEF3E8",
   green:"#2EAA6E", greenLight:"#E6F7F0",
 };
 const BUS = { color:"#7C3AED", bg:"#F3EFFE", border:"#C4B5FD" };
@@ -85,63 +79,34 @@ const safeDateObj = (dateString) => {
   if (!dateString) return { day: "?", month: "???", year: "????" };
   const d = new Date(dateString);
   if (isNaN(d.getTime())) return { day: "?", month: "???", year: "????" };
-  return { 
-    day: d.getDate(), 
-    month: MONTHS[d.getMonth()] ? MONTHS[d.getMonth()].slice(0,3).toUpperCase() : "???",
-    year: d.getFullYear()
-  };
-};
-
-const isImageFile = (filename) => {
-  if (!filename || typeof filename !== 'string') return false;
-  return /\.(jpg|jpeg|png|gif|webp)$/i.test(filename);
+  return { day: d.getDate(), month: MONTHS[d.getMonth()] ? MONTHS[d.getMonth()].slice(0,3).toUpperCase() : "???", year: d.getFullYear() };
 };
 
 // ─── DATENBANK-TRICK (BILD ZU TEXT UMWANDELN OHNE STORAGE) ───
-const compressImageToBase64 = (file, maxWidth = 1000, maxHeight = 1000, quality = 0.6) => {
+const compressImageToBase64 = (file, maxWidth = 800, maxHeight = 800, quality = 0.5) => {
   return new Promise((resolve, reject) => {
-    const fallbackTimer = setTimeout(() => {
-      reject(new Error("Zeitüberschreitung beim Verarbeiten des Bildes")); 
-    }, 4000);
-
+    const fallbackTimer = setTimeout(() => reject(new Error("Zeitüberschreitung")), 4000);
     try {
       const img = new Image();
       const objectUrl = URL.createObjectURL(file); 
-
       img.onload = () => {
         URL.revokeObjectURL(objectUrl);
-        let width = img.width;
-        let height = img.height;
-
+        let width = img.width; let height = img.height;
         if (width > maxWidth || height > maxHeight) {
           const ratio = Math.min(maxWidth / width, maxHeight / height);
-          width = width * ratio;
-          height = height * ratio;
+          width *= ratio; height *= ratio;
         }
-
         const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
+        canvas.width = width; canvas.height = height;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, width, height);
-
-        // Wandelt das Bild direkt in Text um (für die Datenbank)
         const dataUrl = canvas.toDataURL('image/jpeg', quality);
         clearTimeout(fallbackTimer);
         resolve(dataUrl);
       };
-
-      img.onerror = () => {
-        clearTimeout(fallbackTimer);
-        URL.revokeObjectURL(objectUrl);
-        reject(new Error("Bild konnte vom Browser nicht gelesen werden."));
-      };
-
+      img.onerror = () => { clearTimeout(fallbackTimer); URL.revokeObjectURL(objectUrl); reject(new Error("Ladefehler")); };
       img.src = objectUrl;
-    } catch (e) {
-      clearTimeout(fallbackTimer);
-      reject(e);
-    }
+    } catch (e) { clearTimeout(fallbackTimer); reject(e); }
   });
 };
 
@@ -233,8 +198,7 @@ export default function TVHindelangApp() {
           else setUserRole("player");
         } catch { setUserRole("player"); }
       } else {
-        setUser(null);
-        setUserRole(null);
+        setUser(null); setUserRole(null);
       }
       setAuthLoading(false);
     });
@@ -268,13 +232,7 @@ export default function TVHindelangApp() {
     if (!registerName.trim()) { setLoginError("Bitte gib deinen Namen an."); setLoginLoading(false); return; }
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, loginEmail, loginPassword);
-      await setDoc(doc(db, "users", userCredential.user.uid), { 
-        email: loginEmail, 
-        name: registerName, 
-        role: "player", 
-        assignedTeams: [],
-        createdAt: serverTimestamp() 
-      });
+      await setDoc(doc(db, "users", userCredential.user.uid), { email: loginEmail, name: registerName, role: "player", assignedTeams: [], createdAt: serverTimestamp() });
       setLoginEmail(""); setLoginPassword(""); setRegisterName("");
     } catch (e) {
       if (e.code === 'auth/email-already-in-use') setLoginError("Diese E-Mail ist bereits registriert.");
@@ -289,35 +247,22 @@ export default function TVHindelangApp() {
   const handleCSVUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-
     setIsImporting(true);
     const reader = new FileReader();
-    
     reader.onload = async (event) => {
       const text = event.target.result;
       const lines = text.split(/\r?\n/).filter(line => line.trim() !== "");
-      if (lines.length < 2) {
-        alert("Die Datei scheint leer zu sein oder hat keine Überschriften.");
-        setIsImporting(false);
-        return;
-      }
+      if (lines.length < 2) { alert("Datei leer oder ohne Überschriften."); setIsImporting(false); return; }
 
-      const headerLine = lines[0];
-      let delimiter = ";";
-      if (headerLine.includes("\t")) delimiter = "\t"; 
-      else if (headerLine.split(";").length > headerLine.split(",").length) delimiter = ";";
-      else delimiter = ",";
-
+      let delimiter = lines[0].includes("\t") ? "\t" : (lines[0].split(";").length > lines[0].split(",").length ? ";" : ",");
       const parseRow = (rowStr) => {
-        const result = [];
-        let current = '';
-        let inQuotes = false;
+        const result = []; let current = ''; let inQuotes = false;
         for (let i = 0; i < rowStr.length; i++) {
           const char = rowStr[i];
           if (char === '"' && rowStr[i+1] === '"') { current += '"'; i++; } 
-          else if (char === '"') { inQuotes = !inQuotes; } 
+          else if (char === '"') inQuotes = !inQuotes; 
           else if (char === delimiter && !inQuotes) { result.push(current.trim()); current = ''; } 
-          else { current += char; }
+          else current += char;
         }
         result.push(current.trim());
         return result.map(v => safeStr(v).replace(/^"|"$/g, '').trim()); 
@@ -325,118 +270,54 @@ export default function TVHindelangApp() {
 
       const headers = parseRow(lines[0]).map(h => safeStr(h).toLowerCase());
       let count = 0;
-      
       for (let i = 1; i < lines.length; i++) {
-        const values = parseRow(lines[i]);
-        const row = {};
+        const values = parseRow(lines[i]); const row = {};
         headers.forEach((header, index) => { row[header] = values[index] || ""; });
+        const getVal = (exactMatches) => { let key = headers.find(h => exactMatches.includes(h)); return key ? row[key] : ""; };
 
-        const getVal = (exactMatches) => {
-          let key = headers.find(h => exactMatches.includes(h));
-          return key ? row[key] : "";
-        };
-
-        let rawDate = getVal(["spieldatum", "datum", "date"]);
-        let rawTime = getVal(["uhrzeit", "zeit", "anstoßzeit"]);
-        let heim = getVal(["heimmannschaft", "heim"]);
-        let gast = getVal(["gastmannschaft", "gast", "gegner"]);
-        let ort = getVal(["ort", "stadt"]);
-        let spielstaette = getVal(["spielstätte", "spielstaette"]);
-        let mannschaftsart = getVal(["mannschaftsart", "team", "mannschaft"]);
-        let staffel = getVal(["staffel", "liga"]);
+        let rawDate = getVal(["spieldatum", "datum", "date"]); let rawTime = getVal(["uhrzeit", "zeit", "anstoßzeit"]);
+        let heim = getVal(["heimmannschaft", "heim"]); let gast = getVal(["gastmannschaft", "gast", "gegner"]);
+        let ort = getVal(["ort", "stadt"]); let spielstaette = getVal(["spielstätte", "spielstaette"]);
+        let mannschaftsart = getVal(["mannschaftsart", "team", "mannschaft"]); let staffel = getVal(["staffel", "liga"]);
         let typ = getVal(["spielkennung", "spielart", "typ", "spieltyp", "wettbewerb"]);
 
         if (!rawDate || !heim || !gast) continue; 
-
-        let cleanDate = safeStr(rawDate).replace(/^[a-zA-ZäöüßÄÖÜ]{2}\.?\s*/, ''); 
-        let formattedDate = "";
-        const deMatch = cleanDate.match(/(\d{1,2})\.(\d{1,2})\.?(\d{2,4})?/); 
-        const isoMatch = cleanDate.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);      
-        
-        if (isoMatch) {
-           formattedDate = `${isoMatch[1]}-${isoMatch[2].padStart(2,'0')}-${isoMatch[3].padStart(2,'0')}`;
-        } else if (deMatch) {
-           let d = deMatch[1].padStart(2, '0');
-           let m = deMatch[2].padStart(2, '0');
-           let y = deMatch[3] ? (deMatch[3].length === 2 ? '20' + deMatch[3] : deMatch[3]) : new Date().getFullYear().toString();
-           formattedDate = `${y}-${m}-${d}`;
-        } else { continue; }
+        let cleanDate = safeStr(rawDate).replace(/^[a-zA-ZäöüßÄÖÜ]{2}\.?\s*/, ''); let formattedDate = "";
+        const deMatch = cleanDate.match(/(\d{1,2})\.(\d{1,2})\.?(\d{2,4})?/); const isoMatch = cleanDate.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);      
+        if (isoMatch) { formattedDate = `${isoMatch[1]}-${isoMatch[2].padStart(2,'0')}-${isoMatch[3].padStart(2,'0')}`; } 
+        else if (deMatch) { let d = deMatch[1].padStart(2, '0'); let m = deMatch[2].padStart(2, '0'); let y = deMatch[3] ? (deMatch[3].length === 2 ? '20' + deMatch[3] : deMatch[3]) : new Date().getFullYear().toString(); formattedDate = `${y}-${m}-${d}`; } 
+        else continue; 
         if (isNaN(new Date(formattedDate).getTime())) continue;
 
         let formattedTime = "12:00"; 
-        if (rawTime) {
-            let tClean = safeStr(rawTime).replace(".", ":").trim();
-            const tMatch = tClean.match(/(\d{1,2}):(\d{2})/);
-            if (tMatch) formattedTime = `${tMatch[1].padStart(2, '0')}:${tMatch[2]}`;
-        }
-
-        let fullLocation = [spielstaette, ort].filter(Boolean).join(", ");
-        if (!fullLocation) fullLocation = "Ort unbekannt";
-
-        let title = `${heim} vs. ${gast}`;
-        let teamNameRaw = safeStr(mannschaftsart || "Verein"); 
-        
-        if (safeStr(heim).toLowerCase().includes("hindelang") || safeStr(heim).toLowerCase().includes("tvh") || safeStr(heim).toLowerCase().includes("tv ")) {
-          title = `Heimspiel vs. ${gast}`;
-        } else if (safeStr(gast).toLowerCase().includes("hindelang") || safeStr(gast).toLowerCase().includes("tvh") || safeStr(gast).toLowerCase().includes("tv ")) {
-          title = `Auswärts bei ${heim}`;
-        }
+        if (rawTime) { let tClean = safeStr(rawTime).replace(".", ":").trim(); const tMatch = tClean.match(/(\d{1,2}):(\d{2})/); if (tMatch) formattedTime = `${tMatch[1].padStart(2, '0')}:${tMatch[2]}`; }
+        let fullLocation = [spielstaette, ort].filter(Boolean).join(", ") || "Ort unbekannt";
+        let title = `${heim} vs. ${gast}`; let teamNameRaw = safeStr(mannschaftsart || "Verein"); 
+        if (safeStr(heim).toLowerCase().includes("hindelang") || safeStr(heim).toLowerCase().includes("tvh") || safeStr(heim).toLowerCase().includes("tv ")) { title = `Heimspiel vs. ${gast}`; } 
+        else if (safeStr(gast).toLowerCase().includes("hindelang") || safeStr(gast).toLowerCase().includes("tvh") || safeStr(gast).toLowerCase().includes("tv ")) { title = `Auswärts bei ${heim}`; }
 
         let finalTeamName = teamNameRaw;
         let matchedTeam = teams.find(t => {
-          const eName = safeStr(t?.name).toLowerCase().trim();
-          const iName = teamNameRaw.toLowerCase().trim();
+          const eName = safeStr(t?.name).toLowerCase().trim(); const iName = teamNameRaw.toLowerCase().trim();
           if (!eName) return false;
-          return eName === iName ||
-                 eName.replace("jugend", "junioren") === iName ||
-                 eName.replace("junioren", "jugend") === iName ||
-                 eName.replace("mädchen", "juniorinnen") === iName ||
-                 eName.replace("juniorinnen", "mädchen") === iName ||
-                 eName.replace("-", " ") === iName.replace("-", " ") ||
-                 eName.replace("-", "") === iName.replace("-", "");
+          return eName === iName || eName.replace("jugend", "junioren") === iName || eName.replace("junioren", "jugend") === iName || eName.replace("mädchen", "juniorinnen") === iName || eName.replace("juniorinnen", "mädchen") === iName || eName.replace("-", " ") === iName.replace("-", " ") || eName.replace("-", "") === iName.replace("-", "");
         });
+        if (matchedTeam) finalTeamName = matchedTeam.name; else finalTeamName = teamNameRaw.replace(/Junioren/g, "Jugend").replace(/Juniorinnen/g, "Mädchen");
 
-        if (matchedTeam) {
-          finalTeamName = matchedTeam.name;
-        } else {
-          finalTeamName = teamNameRaw.replace(/Junioren/g, "Jugend").replace(/Juniorinnen/g, "Mädchen");
-        }
-
-        let extraInfos = [];
-        if(typ) extraInfos.push(typ);
-        if(staffel) extraInfos.push(`Staffel: ${staffel}`);
+        let extraInfos = []; if(typ) extraInfos.push(typ); if(staffel) extraInfos.push(`Staffel: ${staffel}`);
         let notesText = extraInfos.join(" | ") || "Automatisch importiert";
 
-        const newEvent = {
-          type: "game",
-          title: title,
-          date: formattedDate,
-          time: formattedTime,
-          endTime: "",
-          location: fullLocation,
-          notes: notesText,
-          team: finalTeamName,
-          bus1: false,
-          bus2: false,
-          declines: [],
-          createdAt: serverTimestamp()
-        };
-
-        await addDoc(collection(db, "events"), newEvent);
+        await addDoc(collection(db, "events"), { type: "game", title, date: formattedDate, time: formattedTime, endTime: "", location: fullLocation, notes: notesText, team: finalTeamName, bus1: false, bus2: false, declines: [], createdAt: serverTimestamp() });
         count++;
       }
-      
-      alert(`${count} Spiele wurden erfolgreich in den Kalender importiert!`);
-      setIsImporting(false);
-      if (csvInputRef.current) csvInputRef.current.value = ""; 
+      alert(`${count} Spiele importiert!`); setIsImporting(false); if (csvInputRef.current) csvInputRef.current.value = ""; 
     };
     reader.readAsText(file, "windows-1252");
   };
 
   const shareEventWhatsApp = (ev) => {
-    const d = new Date(ev.date);
-    const dateStr = !isNaN(d.getTime()) ? `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth()+1).padStart(2, '0')}.` : ev.date;
-    const text = `⚽ *Neuer Termin: ${ev.title}*\n📅 ${dateStr}, ${ev.time} Uhr\n📍 ${ev.location || "Heim"}\n👥 ${ev.team}\n\n👉 Bitte in der TVH App prüfen und bei Nicht-Teilnahme auf 'Ich fehle' klicken!`;
+    const d = new Date(ev.date); const dateStr = !isNaN(d.getTime()) ? `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth()+1).padStart(2, '0')}.` : ev.date;
+    const text = `⚽ *Neuer Termin: ${ev.title}*\n📅 ${dateStr}, ${ev.time} Uhr\n📍 ${ev.location || "Heim"}\n👥 ${ev.team}\n\n👉 Bitte in der TVH App prüfen!`;
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   };
 
@@ -447,151 +328,95 @@ export default function TVHindelangApp() {
 
   const toggleDecline = async (ev) => {
     if (!user) return;
-    const myProfile = allUsers.find(u => u.id === user.uid);
-    const myName = myProfile?.name || user.email; 
+    const myProfile = allUsers.find(u => u.id === user.uid); const myName = myProfile?.name || user.email; 
     let newDeclines = Array.isArray(ev.declines) ? [...ev.declines] : [];
-    if (newDeclines.includes(myName)) { newDeclines = newDeclines.filter(n => n !== myName); } 
-    else { newDeclines.push(myName); }
+    if (newDeclines.includes(myName)) newDeclines = newDeclines.filter(n => n !== myName); else newDeclines.push(myName); 
     await updateDoc(doc(db, "events", ev.id), { declines: newDeclines });
   };
 
   const openAddEvent = (date="") => { setEditingEvent(null); setEventForm(emptyEvent(date)); setShowEventModal(true); };
-  const openEditEvent = (ev) => { 
-    setEditingEvent(ev); 
-    setEventForm({type:ev.type,title:ev.title,date:ev.date,time:ev.time,endTime:ev.endTime||"",location:ev.location||"",notes:ev.notes||"",team:ev.team||"Herren",bus1:ev.bus1||false,bus2:ev.bus2||false,declines:ev.declines||[], isRecurring: false, recurringEndDate: ""}); 
-    setShowEventModal(true); 
-  };
+  const openEditEvent = (ev) => { setEditingEvent(ev); setEventForm({type:ev.type,title:ev.title,date:ev.date,time:ev.time,endTime:ev.endTime||"",location:ev.location||"",notes:ev.notes||"",team:ev.team||"Herren",bus1:ev.bus1||false,bus2:ev.bus2||false,declines:ev.declines||[], isRecurring: false, recurringEndDate: ""}); setShowEventModal(true); };
   
   const saveEvent = async () => {
     if (!eventForm.title || !eventForm.date) return;
-
     if (editingEvent) {
-      const updatedData = { ...eventForm };
-      delete updatedData.isRecurring;
-      delete updatedData.recurringEndDate;
+      const updatedData = { ...eventForm }; delete updatedData.isRecurring; delete updatedData.recurringEndDate;
       await updateDoc(doc(db, "events", editingEvent.id), updatedData);
     } else {
       if (eventForm.isRecurring && eventForm.recurringEndDate) {
-        let currentDateObj = new Date(eventForm.date);
-        const endDateObj = new Date(eventForm.recurringEndDate);
-        let loopCount = 0; 
+        let currentDateObj = new Date(eventForm.date); const endDateObj = new Date(eventForm.recurringEndDate); let loopCount = 0; 
         while (currentDateObj <= endDateObj && loopCount < 52) { 
-          const isoDate = currentDateObj.toISOString().slice(0, 10);
-          const newEvent = { ...eventForm, date: isoDate, createdAt: serverTimestamp() };
-          delete newEvent.isRecurring; delete newEvent.recurringEndDate;
-          await addDoc(collection(db, "events"), newEvent);
-          currentDateObj.setDate(currentDateObj.getDate() + 7); 
-          loopCount++;
+          const isoDate = currentDateObj.toISOString().slice(0, 10); const newEvent = { ...eventForm, date: isoDate, createdAt: serverTimestamp() };
+          delete newEvent.isRecurring; delete newEvent.recurringEndDate; await addDoc(collection(db, "events"), newEvent);
+          currentDateObj.setDate(currentDateObj.getDate() + 7); loopCount++;
         }
       } else {
-        const newEvent = { ...eventForm, createdAt: serverTimestamp() };
-        delete newEvent.isRecurring; delete newEvent.recurringEndDate;
+        const newEvent = { ...eventForm, createdAt: serverTimestamp() }; delete newEvent.isRecurring; delete newEvent.recurringEndDate;
         await addDoc(collection(db, "events"), newEvent);
       }
     }
     setShowEventModal(false);
   };
   
-  const deleteEvent = async (id) => { 
-    if (window.confirm("Möchtest du diesen Termin wirklich löschen?")) { await deleteDoc(doc(db,"events",id)); }
-  };
+  const deleteEvent = async (id) => { if (window.confirm("Möchtest du diesen Termin wirklich löschen?")) await deleteDoc(doc(db,"events",id)); };
 
   const openAddNews = () => { setEditingNews(null); setNewsForm({title:"", body:"", fileUrl:"", fileName:"", fileObj:null}); setShowNewsModal(true); };
   const openEditNews = (n) => { setEditingNews(n); setNewsForm({title:n.title, body:n.body, fileUrl:n.fileUrl||"", fileName:n.fileName||"", fileObj:null}); setShowNewsModal(true); };
   
-  // DIE SICHERE NEWS-SPEICHERN-FUNKTION (NUR DATENBANK, KEIN STORAGE)
+  // NUR BILDER, SPEICHERN ALS BASE64 IN FIRESTORE
   const saveNews = async () => {
     if (!newsForm.title || !newsForm.body) return;
     setNewsSaving(true);
-    
-    let finalFileUrl = newsForm.fileUrl; 
-    let finalFileName = newsForm.fileName;
+    let finalFileUrl = newsForm.fileUrl || ""; let finalFileName = newsForm.fileName || "";
     
     if (newsForm.fileObj) {
-      if (!isImageFile(newsForm.fileObj.name)) {
-        alert("Bitte wähle nur ein Bild (JPG, PNG) aus. Dokumente (PDF/DOCX) werden hier nicht unterstützt.");
-        setNewsSaving(false);
-        return;
+      if (!newsForm.fileObj.type.startsWith('image/')) {
+        alert("Bitte wähle nur ein Bild (JPG, PNG) aus. Dokumente sind hier nicht erlaubt.");
+        setNewsSaving(false); return;
       }
-
       try {
         finalFileUrl = await compressImageToBase64(newsForm.fileObj);
         finalFileName = newsForm.fileObj.name;
-      } catch (err) {
-        alert("Das Bild konnte nicht verarbeitet werden: " + err.message);
-        setNewsSaving(false);
-        return;
-      }
-    }
-
-    if (finalFileUrl && finalFileUrl.length > 950000) {
-      alert("Dieses Bild ist nach der Komprimierung immer noch zu groß für die Datenbank. Bitte wähle ein anderes aus.");
-      setNewsSaving(false);
-      return;
+        if (finalFileUrl.length > 900000) { alert("Dieses Bild ist trotz Komprimierung zu groß. Bitte wähle ein anderes."); setNewsSaving(false); return; }
+      } catch (err) { alert("Fehler bei der Bildverarbeitung."); setNewsSaving(false); return; }
     }
 
     const newsData = { title: newsForm.title, body: newsForm.body, fileUrl: finalFileUrl, fileName: finalFileName };
     try {
-      if (editingNews) {
-        await updateDoc(doc(db,"news",editingNews.id), newsData);
-      } else {
-        await addDoc(collection(db,"news"), { ...newsData, date:todayStr, author: user?.email||"Admin", createdAt:serverTimestamp() });
-      }
-    } catch (e) {
-      alert("Fehler beim Speichern in der Datenbank: " + e.message);
-    }
-    
+      if (editingNews) await updateDoc(doc(db,"news",editingNews.id), newsData);
+      else await addDoc(collection(db,"news"), { ...newsData, date:todayStr, author: user?.email||"Admin", createdAt:serverTimestamp() });
+      setShowNewsModal(false);
+    } catch (e) { alert("Datenbank-Fehler: " + e.message); }
     setNewsSaving(false); 
-    setShowNewsModal(false);
   };
 
-  const deleteNews = async (id) => { 
-    if (window.confirm("Möchtest du diese News wirklich löschen?")) { await deleteDoc(doc(db,"news",id)); }
-  };
+  const deleteNews = async (id) => { if (window.confirm("Möchtest du diese News wirklich löschen?")) await deleteDoc(doc(db,"news",id)); };
 
   const openAddTeam  = () => { setEditingTeam(null); setTeamForm(emptyTeamForm()); setShowTeamModal(true); };
   const openEditTeam = (t) => { 
-    setEditingTeam(t); 
-    let loadedTrainers = Array.isArray(t?.trainers) ? t.trainers : [];
-    if (loadedTrainers.length === 0 && t?.trainer) { loadedTrainers = [{ name: t.trainer, phone: "" }]; } 
-    else if (loadedTrainers.length === 0) { loadedTrainers = [{ name: "", phone: "" }]; }
-    setTeamForm({ name: t?.name || "", trainers: loadedTrainers, training: t?.training || "", jahrgang: t?.jahrgang || "" }); 
-    setShowTeamModal(true); 
+    setEditingTeam(t); let loadedTrainers = Array.isArray(t?.trainers) ? t.trainers : [];
+    if (loadedTrainers.length === 0 && t?.trainer) { loadedTrainers = [{ name: t.trainer, phone: "" }]; } else if (loadedTrainers.length === 0) { loadedTrainers = [{ name: "", phone: "" }]; }
+    setTeamForm({ name: t?.name || "", trainers: loadedTrainers, training: t?.training || "", jahrgang: t?.jahrgang || "" }); setShowTeamModal(true); 
   };
   const saveTeam = async () => {
     if (!teamForm.name) return;
     const cleanTrainers = teamForm.trainers.filter(tr => safeStr(tr.name).trim() !== "");
     const finalData = { ...teamForm, trainers: cleanTrainers };
-    if (editingTeam) await updateDoc(doc(db,"teams",editingTeam.id), finalData);
-    else await addDoc(collection(db,"teams"), finalData);
+    if (editingTeam) await updateDoc(doc(db,"teams",editingTeam.id), finalData); else await addDoc(collection(db,"teams"), finalData);
     setShowTeamModal(false);
   };
-  const deleteTeam = async (id) => { 
-    if (window.confirm("Möchtest du diese Mannschaft wirklich löschen?")) { await deleteDoc(doc(db,"teams",id)); }
-  };
+  const deleteTeam = async (id) => { if (window.confirm("Möchtest du diese Mannschaft wirklich löschen?")) await deleteDoc(doc(db,"teams",id)); };
 
-  const openAddUser = () => { 
-    setEditingUser(null); 
-    setUserError(""); 
-    setUserForm({ name: "", email: "", password: "", role: "player", assignedTeams: [] }); 
-    setShowUserModal(true); 
-  };
-  const openEditUser = (u) => { 
-    setEditingUser(u); 
-    setUserError(""); 
-    setUserForm({ name: u?.name || "", email: u?.email || "", password: "", role: u?.role || "player", assignedTeams: Array.isArray(u?.assignedTeams) ? u.assignedTeams : [] }); 
-    setShowUserModal(true); 
-  };
+  const openAddUser = () => { setEditingUser(null); setUserError(""); setUserForm({ name: "", email: "", password: "", role: "player", assignedTeams: [] }); setShowUserModal(true); };
+  const openEditUser = (u) => { setEditingUser(u); setUserError(""); setUserForm({ name: u?.name || "", email: u?.email || "", password: "", role: u?.role || "player", assignedTeams: Array.isArray(u?.assignedTeams) ? u.assignedTeams : [] }); setShowUserModal(true); };
   const saveUser = async () => {
     setUserError(""); setUserSaving(true);
     try {
-      if (editingUser) { 
-        await updateDoc(doc(db, "users", editingUser.id), { name: userForm.name, role: userForm.role, assignedTeams: userForm.assignedTeams }); 
-      } else {
+      if (editingUser) { await updateDoc(doc(db, "users", editingUser.id), { name: userForm.name, role: userForm.role, assignedTeams: userForm.assignedTeams }); } 
+      else {
         if (!userForm.email || !userForm.password) { setUserError("E-Mail und Passwort sind Pflichtfelder für neue Nutzer."); setUserSaving(false); return; }
         const userCredential = await createUserWithEmailAndPassword(secondaryAuth, userForm.email, userForm.password);
-        const newUid = userCredential.user.uid;
-        await setDoc(doc(db, "users", newUid), { email: userForm.email, name: userForm.name, role: userForm.role, assignedTeams: userForm.assignedTeams, createdAt: serverTimestamp() });
+        await setDoc(doc(db, "users", userCredential.user.uid), { email: userForm.email, name: userForm.name, role: userForm.role, assignedTeams: userForm.assignedTeams, createdAt: serverTimestamp() });
         await signOut(secondaryAuth);
       }
       setShowUserModal(false);
@@ -602,38 +427,19 @@ export default function TVHindelangApp() {
     }
     setUserSaving(false);
   };
-  const deleteUser = async (id) => {
-    if (window.confirm("Möchtest du diesen Benutzer unwiderruflich aus der App entfernen?")) { await deleteDoc(doc(db,"users",id)); }
-  };
+  const deleteUser = async (id) => { if (window.confirm("Möchtest du diesen Benutzer entfernen?")) await deleteDoc(doc(db,"users",id)); };
 
   const saveIntro = async (text) => { await setDoc(doc(db,"settings","intro"), { text }); };
 
-  const openChat = async (th) => {
-    setActiveThread(th);
-    if (user && th?.id) {
-      await updateDoc(doc(db, "threads", th.id), { [`readReceipts.${user.uid}`]: Date.now() });
-    }
-  };
+  const openChat = async (th) => { setActiveThread(th); if (user && th?.id) { await updateDoc(doc(db, "threads", th.id), { [`readReceipts.${user.uid}`]: Date.now() }); } };
 
   const sendMessage = async () => {
     if (!chatInput.trim()||!activeThread) return;
-    const myProfile = allUsers.find(u => u.id === user.uid);
-    const senderName = myProfile?.name || user.email;
-    const msg = { 
-      from: senderName, 
-      text: chatInput, 
-      time: new Date().toLocaleTimeString("de",{hour:"2-digit",minute:"2-digit"}),
-      timestamp: Date.now() 
-    };
+    const myProfile = allUsers.find(u => u.id === user.uid); const senderName = myProfile?.name || user.email;
+    const msg = { from: senderName, text: chatInput, time: new Date().toLocaleTimeString("de",{hour:"2-digit",minute:"2-digit"}), timestamp: Date.now() };
     const updated = [...(activeThread.messages||[]), msg];
-    
-    await updateDoc(doc(db,"threads",activeThread.id), { 
-      messages: updated,
-      [`readReceipts.${user.uid}`]: Date.now() 
-    });
-    
-    setActiveThread({...activeThread, messages: updated});
-    setChatInput("");
+    await updateDoc(doc(db,"threads",activeThread.id), { messages: updated, [`readReceipts.${user.uid}`]: Date.now() });
+    setActiveThread({...activeThread, messages: updated}); setChatInput("");
   };
 
   const createThread = async () => {
@@ -642,43 +448,31 @@ export default function TVHindelangApp() {
       setActiveThread({ id:ref.id, type:"group", label:newThreadTeam, team:newThreadTeam, messages:[] });
     } else {
       const existing = threads.find(th => th?.type === "direct" && Array.isArray(th?.participants) && th.participants.includes(user.uid) && th.participants.includes(newThreadRecipientId));
-      if (existing) {
-        openChat(existing);
-      } else {
-        const ref = await addDoc(collection(db,"threads"), { 
-          type:"direct", 
-          participants: [user.uid, newThreadRecipientId],
-          messages:[] 
-        });
+      if (existing) { openChat(existing); } else {
+        const ref = await addDoc(collection(db,"threads"), { type:"direct", participants: [user.uid, newThreadRecipientId], messages:[] });
         setActiveThread({ id:ref.id, type:"direct", participants: [user.uid, newThreadRecipientId], messages:[] });
       }
     }
-    setShowNewThread(false); 
-    setNewThreadRecipientId("");
+    setShowNewThread(false); setNewThreadRecipientId("");
   };
 
   const visibleThreads = (threads || []).filter(th => {
     if (!th) return false;
     if (th.type === "group") {
-      if (isAdmin) return true; 
-      const myProfile = allUsers.find(u => u.id === user?.uid);
+      if (isAdmin) return true; const myProfile = allUsers.find(u => u.id === user?.uid);
       const myTeams = Array.isArray(myProfile?.assignedTeams) ? myProfile.assignedTeams : [];
       return myTeams.includes(th.team); 
     }
-    if (th.type === "direct") {
-      return Array.isArray(th.participants) ? th.participants.includes(user?.uid) : false;
-    }
+    if (th.type === "direct") return Array.isArray(th.participants) ? th.participants.includes(user?.uid) : false;
     return false;
   });
 
   const checkUnread = (th) => {
     if (!th || !Array.isArray(th.messages) || th.messages.length === 0) return false;
-    const lastMsg = th.messages[th.messages.length - 1];
-    const myProfile = allUsers.find(u => u.id === user?.uid);
+    const lastMsg = th.messages[th.messages.length - 1]; const myProfile = allUsers.find(u => u.id === user?.uid);
     if (lastMsg.from === (myProfile?.name || user?.email)) return false; 
     if (!lastMsg.timestamp) return false; 
-    const myLastRead = th.readReceipts?.[user?.uid] || 0;
-    return lastMsg.timestamp > myLastRead;
+    const myLastRead = th.readReceipts?.[user?.uid] || 0; return lastMsg.timestamp > myLastRead;
   };
   const totalUnreadCount = visibleThreads.filter(checkUnread).length;
 
@@ -705,13 +499,10 @@ export default function TVHindelangApp() {
 
   const EventCard = ({ ev, controls=true }) => {
     if (!ev) return null;
-    const t=typeOf(ev.type); 
-    const hasBus=ev.bus1||ev.bus2;
-    const myProfile = allUsers.find(u => u.id === user?.uid);
-    const myName = myProfile?.name || user?.email;
+    const t=typeOf(ev.type); const hasBus=ev.bus1||ev.bus2;
+    const myProfile = allUsers.find(u => u.id === user?.uid); const myName = myProfile?.name || user?.email;
     const hasDeclined = Array.isArray(ev.declines) && ev.declines.includes(myName);
     const isNew = ev.createdAt?.toDate ? ev.createdAt.toDate() > new Date(Date.now() - 48 * 60 * 60 * 1000) : false;
-
     const myTeams = Array.isArray(myProfile?.assignedTeams) ? myProfile.assignedTeams : [];
     const canDecline = isAdmin || isTrainer || myTeams.includes(ev.team);
 
@@ -730,22 +521,18 @@ export default function TVHindelangApp() {
             <div style={{fontSize:13,color:B.teal,fontWeight:700,marginTop:2}}>⏰ {safeStr(ev.time)} {ev.endTime ? `- ${safeStr(ev.endTime)}` : ""} Uhr</div>
             {ev.location&&<div style={{fontSize:12,color:B.midGrey,marginTop:1}}>📍 {safeStr(ev.location)}</div>}
             {ev.notes&&<div style={{fontSize:12,color:B.charcoal,marginTop:4,fontStyle:"italic",fontFamily:"'Barlow',sans-serif"}}>{safeStr(ev.notes)}</div>}
-            
             {canEditEvents && Array.isArray(ev.declines) && ev.declines.length > 0 && (
               <div style={{marginTop: 8, padding: "6px 8px", background: B.redLight, borderRadius: 6, fontSize: 12, color: B.red, fontFamily:"'Barlow',sans-serif"}}>
                 <strong>❌ {ev.declines.length} Absage(n):</strong> {ev.declines.filter(n=>typeof n==='string').join(", ")}
               </div>
             )}
           </div>
-          
           <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0, alignItems:"flex-end"}} className="event-card-actions">
-            
             {canDecline && (
               <button className="btn btn-ghost" style={{padding:"5px 10px", fontSize:11, color: hasDeclined ? B.charcoal : B.red, background: hasDeclined ? B.lightGrey : B.redLight}} onClick={(e)=>{e.stopPropagation(); toggleDecline(ev);}}>
                 {hasDeclined ? "✅ Doch dabei" : "❌ Ich fehle"}
               </button>
             )}
-
             {canEditEvents&&controls&&(
               <div style={{display:"flex", gap:4, marginTop: 4}} className="event-card-admin-actions">
                 <button className="btn btn-edit" style={{background:"#25D366", color:"white"}} onClick={(e)=>{e.stopPropagation(); shareEventWhatsApp(ev);}} title="In WhatsApp teilen">📲 WA</button>
@@ -787,128 +574,100 @@ export default function TVHindelangApp() {
             {isRegisterMode ? "Registrierung" : "Fussball"}
           </div>
         </div>
-        
         <div style={{display:"flex",flexDirection:"column",gap:12}}>
           {isRegisterMode && (
             <div>
               <label style={LBL}>Dein Name (Vor- & Nachname)</label>
-              <input className="input" type="text" placeholder="Max Mustermann" value={registerName}
-                onChange={e=>setRegisterName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleRegister()}/>
+              <input className="input" type="text" placeholder="Max Mustermann" value={registerName} onChange={e=>setRegisterName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleRegister()}/>
             </div>
           )}
           <div>
             <label style={LBL}>E-Mail</label>
-            <input className="input" type="email" placeholder="deine@email.de" value={loginEmail}
-              onChange={e=>setLoginEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&(isRegisterMode?handleRegister():handleLogin())}/>
+            <input className="input" type="email" placeholder="deine@email.de" value={loginEmail} onChange={e=>setLoginEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&(isRegisterMode?handleRegister():handleLogin())}/>
           </div>
           <div>
             <label style={LBL}>Passwort</label>
-            <input className="input" type="password" placeholder={isRegisterMode ? "Mindestens 6 Zeichen" : "••••••••"} value={loginPassword}
-              onChange={e=>setLoginPassword(e.target.value)} onKeyDown={e=>e.key==="Enter"&&(isRegisterMode?handleRegister():handleLogin())}/>
+            <input className="input" type="password" placeholder={isRegisterMode ? "Mindestens 6 Zeichen" : "••••••••"} value={loginPassword} onChange={e=>setLoginPassword(e.target.value)} onKeyDown={e=>e.key==="Enter"&&(isRegisterMode?handleRegister():handleLogin())}/>
           </div>
-          
           {loginError&&<div style={{color:B.red,fontSize:13,fontFamily:"'Barlow',sans-serif"}}>❌ {loginError}</div>}
-          
           <button className="btn btn-primary" style={{marginTop:4}} onClick={isRegisterMode ? handleRegister : handleLogin} disabled={loginLoading||!loginEmail||!loginPassword||(isRegisterMode&&!registerName)}>
             {loginLoading ? "Bitte warten..." : (isRegisterMode ? "Konto erstellen" : "Einloggen")}
           </button>
         </div>
-
-        <div style={{marginTop:24,fontSize:13,color:B.teal,fontWeight:700,fontFamily:"'Barlow',sans-serif",textAlign:"center",cursor:"pointer",textDecoration:"underline"}} 
-             onClick={() => { setIsRegisterMode(!isRegisterMode); setLoginError(""); }}>
+        <div style={{marginTop:24,fontSize:13,color:B.teal,fontWeight:700,fontFamily:"'Barlow',sans-serif",textAlign:"center",cursor:"pointer",textDecoration:"underline"}} onClick={() => { setIsRegisterMode(!isRegisterMode); setLoginError(""); }}>
           {isRegisterMode ? "Bereits ein Konto? Hier einloggen" : "Noch kein Konto? Hier registrieren"}
         </div>
       </div>
     </div>
   );
-
   return (
     <div className="app-container" style={{fontFamily:"'Barlow Condensed','Arial Narrow',sans-serif",background:B.offWhite,color:B.anthracite}}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800;900&family=Barlow:wght@400;500;600&display=swap');
         *{box-sizing:border-box;margin:0;padding:0;}
         html, body { height: 100%; width: 100%; margin: 0; padding: 0; }
-        
         .app-container { display: flex; flex-direction: column; min-height: 100vh; min-height: 100dvh; }
         .main-wrapper { flex: 1; overflow-y: auto; padding: 28px 24px; }
-        
         .hide-scroll { overflow-x: auto; -ms-overflow-style: none; scrollbar-width: none; }
         .hide-scroll::-webkit-scrollbar { display: none; }
-        
         .nav-btn { position:relative; background:none;border:none;cursor:pointer;padding:13px 15px;color:${B.midGrey};font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;border-bottom:3px solid transparent;transition:all .2s;display:flex;align-items:center;gap:6px;white-space:nowrap; }
         .nav-btn:hover { color:${B.teal}; } .nav-btn.active { color:${B.teal};border-bottom-color:${B.teal}; }
-        
         .btn { border:none;border-radius:7px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:1px;text-transform:uppercase;transition:all .18s; }
         .btn-primary { background:${B.teal};color:white;padding:10px 22px;font-size:14px; } .btn-primary:hover{background:${B.tealDark};}
         .btn-primary:disabled { background:${B.lightGrey};color:${B.midGrey};cursor:not-allowed; }
         .btn-ghost { background:${B.lightGrey};color:${B.charcoal};padding:8px 16px;font-size:13px; } .btn-ghost:hover{background:#d0dadc;}
         .btn-edit { background:${B.tealLight};color:${B.teal};padding:6px 10px;font-size:12px; } .btn-edit:hover{background:${B.teal};color:white;}
         .btn-danger { background:${B.redLight};color:${B.red};padding:6px 10px;font-size:12px; } .btn-danger:hover{background:${B.red};color:white;}
-        
         .card { background:${B.white};border:1.5px solid ${B.lightGrey};border-radius:10px; }
         .input { background:${B.white};border:1.5px solid ${B.lightGrey};color:${B.anthracite};border-radius:8px;padding:9px 13px;font-family:'Barlow',sans-serif;font-size:14px;width:100%;outline:none;transition:border-color .2s; } .input:focus{border-color:${B.teal};}
         select.input option { background:white; } textarea.input { resize:vertical;min-height:80px; } input[type="file"].input { padding: 6px 10px; font-size: 13px; }
-        
         .modal-bg { position:fixed;inset:0;background:rgba(28,28,28,.5);display:flex;align-items:center;justify-content:center;z-index:2000;padding:20px;backdrop-filter:blur(4px); }
         .modal { background:${B.white};border-radius:14px;padding:30px;width:100%;max-width:520px;box-shadow:0 24px 64px rgba(0,0,0,.15);max-height:90vh;overflow-y:auto; }
-        
         .cal-day { min-height:64px;background:${B.white};border:1.5px solid ${B.lightGrey};border-radius:8px;padding:6px;cursor:pointer;transition:all .15s; }
         .cal-day:hover { border-color:${B.tealMid};background:#f0fbfc; } .cal-day.today{border-color:${B.teal};background:${B.tealLight};}
         .cal-day.selected { border-color:${B.teal};background:#dff2f5;box-shadow:0 0 0 2px ${B.tealMid}; } .cal-day.other-month{opacity:.2;pointer-events:none;}
         .event-bar { height:4px;border-radius:3px;margin:1px 0; }
-        
         .tile { background:${B.white};border:1.5px solid ${B.lightGrey};border-radius:14px;padding:22px;cursor:pointer;transition:all .2s;display:flex;flex-direction:column;gap:12px; }
         .tile:hover { border-color:${B.teal};transform:translateY(-2px);box-shadow:0 8px 24px rgba(41,184,200,.1); }
         .team-card { background:${B.white};border:1.5px solid ${B.lightGrey};border-radius:10px;padding:18px 20px;cursor:pointer;transition:all .2s; }
         .team-card:hover { border-color:${B.teal};transform:translateY(-2px);box-shadow:0 6px 20px rgba(41,184,200,.1); }
-        
         .chat-me { background:${B.teal};color:white;border-radius:14px 14px 2px 14px;padding:9px 14px;max-width:78%;align-self:flex-end;font-size:14px;font-family:'Barlow',sans-serif; }
         .chat-them { background:${B.white};border:1.5px solid ${B.lightGrey};border-radius:14px 14px 14px 2px;padding:9px 14px;max-width:78%;align-self:flex-start;font-size:14px;font-family:'Barlow',sans-serif; }
         .unread-dot { width: 10px; height: 10px; background: ${B.red}; border-radius: 50%; display: inline-block; flex-shrink: 0; }
-        
         .pill { border:none;border-radius:20px;padding:6px 14px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:.8px;text-transform:uppercase;white-space:nowrap;transition:all .15s; flex-shrink: 0;}
         .admin-tab { background:none;border:none;border-bottom:2px solid transparent;padding:10px 18px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:1px;text-transform:uppercase;color:${B.midGrey};transition:all .2s; white-space: nowrap;}
         .admin-tab:hover { color:${B.amber}; } .admin-tab.active{color:${B.amber};border-bottom-color:${B.amber};}
-        
         .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
         .cal-layout { display: grid; grid-template-columns: 1fr 320px; gap: 24px; max-width: 1200px; margin: 0 auto; }
         .schedule-grid { display: grid; grid-template-columns: 64px 3px 1fr auto; gap: 14px; align-items: center; padding: 14px 18px; transition: border-color .2s; }
         .admin-list-item { display: grid; grid-template-columns: 160px 1fr 1fr 1fr auto; gap: 16px; align-items: center; padding: 14px 18px; }
         .chat-layout { display: grid; grid-template-columns: 270px 1fr; background: ${B.white}; border-radius: 12px; border: 1.5px solid ${B.lightGrey}; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,.07); height: calc(100vh - 200px); min-height: 500px; }
-        
         .bottom-nav { display: none; }
         .mobile-back-btn { display: none; }
-        
         @media (max-width: 768px) {
           .main-wrapper { padding: 16px 16px 100px 16px; }
           .top-nav-links { display: none !important; }
           .header-right { margin-left: auto; }
-          
           .bottom-nav { display: flex !important; position: fixed; bottom: 0; left: 0; width: 100%; background: ${B.white}; border-top: 1.5px solid ${B.lightGrey}; z-index: 9999; padding-bottom: max(12px, env(safe-area-inset-bottom)); justify-content: space-around; box-shadow: 0 -4px 20px rgba(0,0,0,0.08); }
           .bottom-nav-item { position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px 0 8px 0; color: ${B.midGrey}; font-family: 'Barlow Condensed', sans-serif; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; border: none; background: none; cursor: pointer; transition: color .2s;}
           .bottom-nav-item.active { color: ${B.teal}; }
           .bottom-nav-icon { font-size: 22px; margin-bottom: 2px; }
           .nav-badge-mobile { position: absolute; top: 6px; right: calc(50% - 14px); background: ${B.red}; width: 8px; height: 8px; border-radius: 50%; }
-          
           .grid-2 { grid-template-columns: 1fr; }
           .cal-layout { grid-template-columns: 1fr; gap: 16px; }
           .cal-sidebar { order: -1; }
-          
           .schedule-grid { grid-template-columns: 50px 3px 1fr; padding: 14px; position: relative; gap: 10px; }
           .schedule-actions { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; margin-top: 4px; border-top: 1px dashed ${B.lightGrey}; padding-top: 12px; flex-direction: row !important; }
           .event-card-inner { flex-direction: column; }
           .event-card-actions { width: 100%; flex-direction: row !important; justify-content: space-between; align-items: center !important; margin-top: 8px; border-top: 1px dashed ${B.lightGrey}; padding-top: 10px; }
           .event-card-admin-actions { margin-top: 0 !important; }
-
           .admin-list-item { grid-template-columns: 1fr; gap: 8px; padding: 16px; }
           .admin-list-actions { display: flex; gap: 8px; margin-top: 4px; padding-top: 10px; border-top: 1px dashed ${B.lightGrey}; }
           .admin-tabs-container { overflow-x: auto; padding-bottom: 5px; }
-          
           .chat-layout { grid-template-columns: 1fr; height: calc(100vh - 180px); border-radius: 8px; }
           .chat-sidebar.mobile-hidden { display: none !important; }
           .chat-main.mobile-hidden { display: none !important; }
           .mobile-back-btn { display: block; background: none; border: none; font-size: 22px; cursor: pointer; margin-right: 12px; color: ${B.anthracite}; }
-          
           .modal { padding: 20px; }
         }
       `}</style>
@@ -925,7 +684,6 @@ export default function TVHindelangApp() {
             <div style={{fontSize:10,fontWeight:700,color:B.teal,letterSpacing:3,textTransform:"uppercase",marginTop:-2}}>FUSSBALL</div>
           </div>
         </div>
-        
         <nav className="top-nav-links" style={{display:"flex",alignItems:"center"}}>
           {NAV.map(({id,icon,label,badge})=>(
             <button key={id} className={`nav-btn ${view===id?"active":""}`} onClick={()=>{setView(id);setSelectedTeam(null);}}>
@@ -935,147 +693,81 @@ export default function TVHindelangApp() {
           ))}
           <div style={{width:1,height:28,background:B.lightGrey,margin:"0 8px"}}/>
           {canAccessAdmin&&(
-            <button className={`nav-btn ${view==="admin"?"active":""}`} style={{color:B.amber}} onClick={()=>{
-              setView("admin");
-              if(isTrainer && !isAdmin && adminSection !== "events" && adminSection !== "news") setAdminSection("events");
-            }}>⚙️ Admin</button>
+            <button className={`nav-btn ${view==="admin"?"active":""}`} style={{color:B.amber}} onClick={()=>{ setView("admin"); if(isTrainer && !isAdmin && adminSection !== "events" && adminSection !== "news") setAdminSection("events"); }}>⚙️ Admin</button>
           )}
         </nav>
-        <div className="header-right">
-          <button className="btn btn-ghost" style={{fontSize:11,padding:"5px 10px"}} onClick={handleLogout}>Abmelden</button>
-        </div>
+        <div className="header-right"><button className="btn btn-ghost" style={{fontSize:11,padding:"5px 10px"}} onClick={handleLogout}>Abmelden</button></div>
       </header>
 
-      {/* ── FILTER & LEGENDE BAR (DYNAMIC) ── */}
+      {/* ── FILTER BAR ── */}
       {(view==="calendar"||view==="schedule")&&(
         <div style={{background:B.white,borderBottom:`1.5px solid ${B.lightGrey}`,flexShrink:0}}>
-          {/* 1. Team Filter Row */}
           <div className="hide-scroll" style={{padding:"10px 24px",display:"flex",alignItems:"center",gap:10, borderBottom:`1px dashed ${B.lightGrey}`}}>
             <span style={{fontSize:12,fontWeight:800,color:B.midGrey,letterSpacing:1,textTransform:"uppercase",flexShrink:0}}>👥 Team:</span>
-            {teamNames.map(t=>(
-              <button key={t} className="pill" style={{background:filterTeam===t?B.teal:B.offWhite,color:filterTeam===t?B.white:B.midGrey}} onClick={()=>setFilterTeam(t)}>{t}</button>
-            ))}
+            {teamNames.map(t=>(<button key={t} className="pill" style={{background:filterTeam===t?B.teal:B.offWhite,color:filterTeam===t?B.white:B.midGrey}} onClick={()=>setFilterTeam(t)}>{t}</button>))}
           </div>
-          {/* 2. Typ Filter Row */}
           <div className="hide-scroll" style={{padding:"10px 24px",display:"flex",alignItems:"center",gap:10, borderBottom:`1px dashed ${B.lightGrey}`}}>
             <span style={{fontSize:12,fontWeight:800,color:B.midGrey,letterSpacing:1,textTransform:"uppercase",flexShrink:0}}>🏷️ Typ:</span>
             <button className="pill" style={{background:filterEventType==="all"?B.anthracite:B.offWhite,color:filterEventType==="all"?B.white:B.midGrey}} onClick={()=>setFilterEventType("all")}>Alle</button>
-            {EVENT_TYPES.map(t=>(
-              <button key={t.value} className="pill" style={{background:filterEventType===t.value?t.color:B.offWhite,color:filterEventType===t.value?B.white:B.midGrey}} onClick={()=>setFilterEventType(t.value)}>{t.label}</button>
-            ))}
+            {EVENT_TYPES.map(t=>(<button key={t.value} className="pill" style={{background:filterEventType===t.value?t.color:B.offWhite,color:filterEventType===t.value?B.white:B.midGrey}} onClick={()=>setFilterEventType(t.value)}>{t.label}</button>))}
           </div>
-          {/* 3. Legend Row */}
           <div className="hide-scroll" style={{padding:"8px 24px",display:"flex",alignItems:"center",gap:16}}>
             <span style={{fontSize:11,fontWeight:800,color:B.midGrey,letterSpacing:1,textTransform:"uppercase",flexShrink:0}}>🎨 Legende:</span>
-            {EVENT_TYPES.map(t=>(
-              <div key={t.value} style={{display:"flex",alignItems:"center",gap:5,fontSize:12,fontWeight:600,color:B.charcoal,flexShrink:0}}>
-                <div style={{width:12,height:12,borderRadius:3,background:t.color}}/>{t.label}
-              </div>
-            ))}
-            <div style={{display:"flex",alignItems:"center",gap:5,fontSize:12,fontWeight:600,color:B.charcoal,flexShrink:0}}>
-              <div style={{width:12,height:12,borderRadius:3,background:BUS.color}}/>🚌 Bus
-            </div>
+            {EVENT_TYPES.map(t=>(<div key={t.value} style={{display:"flex",alignItems:"center",gap:5,fontSize:12,fontWeight:600,color:B.charcoal,flexShrink:0}}><div style={{width:12,height:12,borderRadius:3,background:t.color}}/>{t.label}</div>))}
+            <div style={{display:"flex",alignItems:"center",gap:5,fontSize:12,fontWeight:600,color:B.charcoal,flexShrink:0}}><div style={{width:12,height:12,borderRadius:3,background:BUS.color}}/>🚌 Bus</div>
           </div>
         </div>
       )}
 
       {/* ── CONTENT ── */}
       <main className="main-wrapper">
-
         {/* ════ HOME ════ */}
         {view==="home"&&(
           <div style={{maxWidth:960,margin:"0 auto"}}>
             <div style={{background:`linear-gradient(135deg,${B.teal},${B.tealDark})`,borderRadius:16,padding:"32px 36px",marginBottom:28,color:B.white,position:"relative",overflow:"hidden"}}>
               <div style={{position:"absolute",right:-10,top:-30,opacity:.07,fontSize:200,lineHeight:1,pointerEvents:"none"}}>⚽</div>
-              <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:14}}>
-                <PineLogo size={46}/>
-                <div>
-                  <div style={{fontSize:11,fontWeight:700,letterSpacing:3,opacity:.8,textTransform:"uppercase"}}>Willkommen bei</div>
-                  <div style={{fontSize:30,fontWeight:900,letterSpacing:2,textTransform:"uppercase",lineHeight:1.1}}>TV Hindelang Fussball</div>
-                </div>
-              </div>
+              <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:14}}><PineLogo size={46}/><div><div style={{fontSize:11,fontWeight:700,letterSpacing:3,opacity:.8,textTransform:"uppercase"}}>Willkommen bei</div><div style={{fontSize:30,fontWeight:900,letterSpacing:2,textTransform:"uppercase",lineHeight:1.1}}>TV Hindelang Fussball</div></div></div>
               <p style={{fontFamily:"'Barlow',sans-serif",fontSize:15,lineHeight:1.65,opacity:.92,maxWidth:580}}>{safeStr(introText)}</p>
             </div>
             <div className="grid-2">
               <div className="tile" onClick={()=>setView("calendar")}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                  <span style={{fontSize:13,fontWeight:800,letterSpacing:1.5,textTransform:"uppercase",color:B.teal}}>📅 Nächste Termine</span>
-                  <span style={{fontSize:11,color:B.midGrey,fontWeight:600}}>Kalender →</span>
-                </div>
-                {nextThree.length===0
-                  ? <div style={{fontSize:13,color:B.midGrey,fontFamily:"'Barlow',sans-serif"}}>Keine kommenden Termine</div>
-                  : nextThree.map(ev=>{
-                      if (!ev) return null;
-                      const t=typeOf(ev.type); const sd=safeDateObj(ev.date); const hasBus=ev.bus1||ev.bus2;
-                      return (
-                        <div key={ev.id || Math.random()} style={{display:"flex",gap:12,alignItems:"center",padding:"9px 11px",background:B.offWhite,borderRadius:8,borderLeft:`3px solid ${hasBus?BUS.color:t.color}`}}>
-                          <div style={{textAlign:"center",minWidth:30,flexShrink:0}}>
-                            <div style={{fontSize:19,fontWeight:900,color:hasBus?BUS.color:t.color,lineHeight:1}}>{sd.day}</div>
-                            <div style={{fontSize:10,color:B.midGrey,fontWeight:700}}>{sd.month}</div>
-                          </div>
-                          <div style={{flex:1,minWidth:0}}>
-                            <div style={{fontWeight:800,fontSize:14,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{safeStr(ev.title)}</div>
-                            <div style={{fontSize:11,color:B.midGrey}}>⏰ {safeStr(ev.time)} {ev.endTime ? `- ${safeStr(ev.endTime)}` : ""} · {safeStr(ev.team)}</div>
-                          </div>
-                        </div>
-                      );
-                    })
-                }
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontSize:13,fontWeight:800,letterSpacing:1.5,textTransform:"uppercase",color:B.teal}}>📅 Nächste Termine</span><span style={{fontSize:11,color:B.midGrey,fontWeight:600}}>Kalender →</span></div>
+                {nextThree.length===0 ? <div style={{fontSize:13,color:B.midGrey,fontFamily:"'Barlow',sans-serif"}}>Keine kommenden Termine</div> : nextThree.map(ev=>{
+                  if (!ev) return null; const t=typeOf(ev.type); const sd=safeDateObj(ev.date); const hasBus=ev.bus1||ev.bus2;
+                  return (
+                    <div key={ev.id || Math.random()} style={{display:"flex",gap:12,alignItems:"center",padding:"9px 11px",background:B.offWhite,borderRadius:8,borderLeft:`3px solid ${hasBus?BUS.color:t.color}`}}>
+                      <div style={{textAlign:"center",minWidth:30,flexShrink:0}}><div style={{fontSize:19,fontWeight:900,color:hasBus?BUS.color:t.color,lineHeight:1}}>{sd.day}</div><div style={{fontSize:10,color:B.midGrey,fontWeight:700}}>{sd.month}</div></div>
+                      <div style={{flex:1,minWidth:0}}><div style={{fontWeight:800,fontSize:14,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{safeStr(ev.title)}</div><div style={{fontSize:11,color:B.midGrey}}>⏰ {safeStr(ev.time)} {ev.endTime ? `- ${safeStr(ev.endTime)}` : ""} · {safeStr(ev.team)}</div></div>
+                    </div>
+                  );
+                })}
               </div>
               <div className="tile" onClick={()=>setView("schedule")}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                  <span style={{fontSize:13,fontWeight:800,letterSpacing:1.5,textTransform:"uppercase",color:B.red}}>📋 Spielplan</span>
-                  <span style={{fontSize:11,color:B.midGrey,fontWeight:600}}>Alle Spiele →</span>
-                </div>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontSize:13,fontWeight:800,letterSpacing:1.5,textTransform:"uppercase",color:B.red}}>📋 Spielplan</span><span style={{fontSize:11,color:B.midGrey,fontWeight:600}}>Alle Spiele →</span></div>
                 {events.filter(e=>e && e.type==="game"&&(e.date||"")>=todayStr).sort((a,b)=>safeStr(a.date).localeCompare(safeStr(b.date))).slice(0,3).map(ev=>{
-                  if (!ev) return null;
-                  const sd=safeDateObj(ev.date);
+                  if (!ev) return null; const sd=safeDateObj(ev.date);
                   return (
                     <div key={ev.id || Math.random()} style={{display:"flex",gap:10,alignItems:"center",padding:"9px 11px",background:B.redLight,borderRadius:8}}>
-                      <div style={{textAlign:"center",minWidth:28,flexShrink:0}}>
-                        <div style={{fontSize:17,fontWeight:900,color:B.red,lineHeight:1}}>{sd.day}</div>
-                        <div style={{fontSize:10,color:B.red,fontWeight:700,opacity:.7}}>{sd.month}</div>
-                      </div>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontWeight:800,fontSize:13,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{safeStr(ev.title)}</div>
-                        <div style={{fontSize:11,color:B.midGrey}}>{safeStr(ev.team)} · {safeStr(ev.time)} {ev.endTime ? `- ${safeStr(ev.endTime)}` : ""} Uhr</div>
-                      </div>
+                      <div style={{textAlign:"center",minWidth:28,flexShrink:0}}><div style={{fontSize:17,fontWeight:900,color:B.red,lineHeight:1}}>{sd.day}</div><div style={{fontSize:10,color:B.red,fontWeight:700,opacity:.7}}>{sd.month}</div></div>
+                      <div style={{flex:1,minWidth:0}}><div style={{fontWeight:800,fontSize:13,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{safeStr(ev.title)}</div><div style={{fontSize:11,color:B.midGrey}}>{safeStr(ev.team)} · {safeStr(ev.time)} {ev.endTime ? `- ${safeStr(ev.endTime)}` : ""} Uhr</div></div>
                     </div>
                   );
                 })}
               </div>
               <div className="tile" onClick={()=>setView("teams")}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                  <span style={{fontSize:13,fontWeight:800,letterSpacing:1.5,textTransform:"uppercase",color:B.green}}>👥 Mannschaften</span>
-                  <span style={{fontSize:11,color:B.midGrey,fontWeight:600}}>Übersicht →</span>
-                </div>
-                <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
-                  {teams.map(t=>{
-                    if (!t) return null;
-                    return <span key={t.id || Math.random()} style={{display:"inline-block",padding:"2px 9px",borderRadius:20,fontSize:11,fontWeight:700,background:B.tealLight,color:B.teal}}>{safeStr(t.name)}</span>
-                  })}
-                </div>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontSize:13,fontWeight:800,letterSpacing:1.5,textTransform:"uppercase",color:B.green}}>👥 Mannschaften</span><span style={{fontSize:11,color:B.midGrey,fontWeight:600}}>Übersicht →</span></div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:5}}>{teams.map(t=>{ if (!t) return null; return <span key={t.id || Math.random()} style={{display:"inline-block",padding:"2px 9px",borderRadius:20,fontSize:11,fontWeight:700,background:B.tealLight,color:B.teal}}>{safeStr(t.name)}</span>})}</div>
                 <div style={{fontSize:13,color:B.midGrey,fontFamily:"'Barlow',sans-serif"}}>{teams.length} aktive Mannschaften</div>
               </div>
               <div className="tile" style={{cursor:"default"}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                  <span style={{fontSize:13,fontWeight:800,letterSpacing:1.5,textTransform:"uppercase",color:B.amber}}>📢 News</span>
-                  {canEditNews&&<button className="btn btn-primary" style={{padding:"5px 12px",fontSize:11}} onClick={e=>{e.stopPropagation();openAddNews();}}>+ News</button>}
-                </div>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontSize:13,fontWeight:800,letterSpacing:1.5,textTransform:"uppercase",color:B.amber}}>📢 News</span>{canEditNews&&<button className="btn btn-primary" style={{padding:"5px 12px",fontSize:11}} onClick={e=>{e.stopPropagation();openAddNews();}}>+ News</button>}</div>
                 {news.slice(0,2).map(n=>{
                   if (!n) return null;
                   return (
                   <div key={n.id || Math.random()} style={{padding:"10px 12px",background:B.amberLight,borderRadius:8,borderLeft:`3px solid ${B.amber}`}}>
                     <div style={{fontWeight:800,fontSize:14,marginBottom:3}}>{safeStr(n.title)}</div>
                     <div style={{fontSize:12,color:B.charcoal,fontFamily:"'Barlow',sans-serif",lineHeight:1.5}}>{safeStr(n.body).slice(0,90)}{safeStr(n.body).length>90?"…":""}</div>
-                    
-                    {/* BILD-VORSCHAU FÜR BASE64 BILDER */}
-                    {n.fileUrl && n.fileUrl.startsWith("data:image") ? (
-                      <a href={n.fileUrl} target="_blank" rel="noopener noreferrer" style={{display:"block", marginTop:8}}>
-                        <img src={n.fileUrl} alt="News Anhang" style={{width:"100%", maxHeight:160, objectFit:"cover", borderRadius:6, border:`1px solid ${B.lightGrey}`}} />
-                      </a>
-                    ) : null}
-                    
+                    {n.fileUrl && n.fileUrl.startsWith("data:image") ? ( <a href={n.fileUrl} target="_blank" rel="noopener noreferrer" style={{display:"block", marginTop:8}}><img src={n.fileUrl} alt="News Anhang" style={{width:"100%", maxHeight:160, objectFit:"cover", borderRadius:6, border:`1px solid ${B.lightGrey}`}} /></a> ) : null}
                     <div style={{fontSize:10,color:B.midGrey,marginTop:6,fontWeight:600}}>{safeStr(n.date)} · {safeStr(n.author)}</div>
                   </div>
                 )})}
@@ -1090,21 +782,13 @@ export default function TVHindelangApp() {
             <div>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}>
                 <h1 style={{fontSize:30,fontWeight:900,letterSpacing:2,textTransform:"uppercase"}}>{MONTHS[month]} <span style={{color:B.teal}}>{year}</span></h1>
-                <div style={{display:"flex",gap:8}}>
-                  <button className="btn btn-ghost" onClick={()=>setCurrentDate(new Date(year,month-1,1))}>◀</button>
-                  <button className="btn btn-ghost" onClick={()=>setCurrentDate(new Date(year,month+1,1))}>▶</button>
-                  {canEditEvents&&<button className="btn btn-primary" onClick={()=>openAddEvent()}>+ Termin</button>}
-                </div>
+                <div style={{display:"flex",gap:8}}><button className="btn btn-ghost" onClick={()=>setCurrentDate(new Date(year,month-1,1))}>◀</button><button className="btn btn-ghost" onClick={()=>setCurrentDate(new Date(year,month+1,1))}>▶</button>{canEditEvents&&<button className="btn btn-primary" onClick={()=>openAddEvent()}>+ Termin</button>}</div>
               </div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:5,marginBottom:5}}>
-                {DAYS.map(d=><div key={d} style={{textAlign:"center",fontSize:11,fontWeight:700,letterSpacing:2,color:B.midGrey}}>{d}</div>)}
-              </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:5,marginBottom:5}}>{DAYS.map(d=><div key={d} style={{textAlign:"center",fontSize:11,fontWeight:700,letterSpacing:2,color:B.midGrey}}>{d}</div>)}</div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:5}}>
                 {Array.from({length:startOffset}).map((_,i)=><div key={`e${i}`} className="cal-day other-month"/>)}
                 {Array.from({length:daysInMonth}).map((_,i)=>{
-                  const day=i+1; const dayEvs=getDay(day);
-                  const now=new Date(); const isToday=day===now.getDate()&&month===now.getMonth()&&year===now.getFullYear();
-                  const isSel=selectedDay===day;
+                  const day=i+1; const dayEvs=getDay(day); const now=new Date(); const isToday=day===now.getDate()&&month===now.getMonth()&&year===now.getFullYear(); const isSel=selectedDay===day;
                   return (
                     <div key={day} className={`cal-day ${isToday?"today":""} ${isSel?"selected":""}`} onClick={()=>setSelectedDay(day===selectedDay?null:day)}>
                       <div style={{fontSize:12,fontWeight:700,color:isToday||isSel?B.teal:B.charcoal,marginBottom:2}}>{day}</div>
@@ -1118,21 +802,12 @@ export default function TVHindelangApp() {
             <div className="card cal-sidebar" style={{padding:20,alignSelf:"start"}}>
               {selectedDay ? (
                 <>
-                  <div style={{marginBottom:16}}>
-                    <div style={{fontSize:20,fontWeight:900}}>{selectedDay}. {MONTHS[month]} {year}</div>
-                    <div style={{fontSize:12,color:B.midGrey,marginTop:2}}>{selectedEvs.length} Termin{selectedEvs.length!==1?"e":""}</div>
-                  </div>
-                  {selectedEvs.length===0
-                    ? <div style={{textAlign:"center",color:B.midGrey,padding:"24px 0",fontSize:14,fontFamily:"'Barlow',sans-serif"}}>Keine Termine an diesem Tag</div>
-                    : selectedEvs.map(ev=><EventCard key={ev.id || Math.random()} ev={ev}/>)
-                  }
+                  <div style={{marginBottom:16}}><div style={{fontSize:20,fontWeight:900}}>{selectedDay}. {MONTHS[month]} {year}</div><div style={{fontSize:12,color:B.midGrey,marginTop:2}}>{selectedEvs.length} Termin{selectedEvs.length!==1?"e":""}</div></div>
+                  {selectedEvs.length===0 ? <div style={{textAlign:"center",color:B.midGrey,padding:"24px 0",fontSize:14,fontFamily:"'Barlow',sans-serif"}}>Keine Termine an diesem Tag</div> : selectedEvs.map(ev=><EventCard key={ev.id || Math.random()} ev={ev}/>)}
                   {canEditEvents&&<button className="btn btn-primary" style={{width:"100%",marginTop:8}} onClick={()=>openAddEvent(selectedStr)}>+ Termin hinzufügen</button>}
                 </>
               ) : (
-                <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:220,color:B.midGrey,gap:10}}>
-                  <div style={{fontSize:40}}>📅</div>
-                  <div style={{fontSize:14,fontFamily:"'Barlow',sans-serif",textAlign:"center"}}>Tag auswählen<br/>für Details</div>
-                </div>
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:220,color:B.midGrey,gap:10}}><div style={{fontSize:40}}>📅</div><div style={{fontSize:14,fontFamily:"'Barlow',sans-serif",textAlign:"center"}}>Tag auswählen<br/>für Details</div></div>
               )}
             </div>
           </div>
@@ -1142,55 +817,28 @@ export default function TVHindelangApp() {
         {view==="schedule"&&(
           <div style={{maxWidth:920,margin:"0 auto"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:22}}>
-              <h1 style={{fontSize:30,fontWeight:900,letterSpacing:2,textTransform:"uppercase"}}>Spielplan & <span style={{color:B.teal}}>Termine</span></h1>
-              {canEditEvents&&<button className="btn btn-primary" onClick={()=>openAddEvent()}>+ Neuer Termin</button>}
+              <h1 style={{fontSize:30,fontWeight:900,letterSpacing:2,textTransform:"uppercase"}}>Spielplan & <span style={{color:B.teal}}>Termine</span></h1>{canEditEvents&&<button className="btn btn-primary" onClick={()=>openAddEvent()}>+ Neuer Termin</button>}
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:10}}>
-              {upcoming.length===0
-                ? <div style={{textAlign:"center",color:B.midGrey,padding:48}}>Keine Termine für diese Auswahl</div>
-                : upcoming.map(ev=>{
-                    if (!ev) return null;
-                    const t=typeOf(ev.type); const sd=safeDateObj(ev.date); const hasBus=ev.bus1||ev.bus2;
-                    const myProfile = allUsers.find(u => u.id === user?.uid);
-                    const myName = myProfile?.name || user?.email;
-                    const hasDeclined = Array.isArray(ev.declines) && ev.declines.includes(myName);
-
-                    return (
-                      <div key={ev.id || Math.random()} className="card schedule-grid"
-                        onMouseEnter={e=>e.currentTarget.style.borderColor=hasBus?BUS.color:t.color}
-                        onMouseLeave={e=>e.currentTarget.style.borderColor=B.lightGrey}>
-                        <div style={{textAlign:"center"}}>
-                          <div style={{fontSize:24,fontWeight:900,color:hasBus?BUS.color:t.color,lineHeight:1}}>{sd.day}</div>
-                          <div style={{fontSize:11,color:B.midGrey,fontWeight:700}}>{sd.month}</div>
-                        </div>
-                        <div style={{width:3,background:hasBus?BUS.color:t.color,borderRadius:2,alignSelf:"stretch"}}/>
-                        <div style={{flex: 1}}>
-                          <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3,flexWrap:"wrap"}}>
-                            <span style={{fontWeight:800,fontSize:16}}>{safeStr(ev.title)}</span>
-                            <Chip bg={t.bg} c={t.color}>{t.label}</Chip>
-                            {ev.team&&<Chip bg={B.anthracite+"11"} c={B.charcoal}>{safeStr(ev.team)}</Chip>}
-                            {ev.bus1&&<Chip bg={BUS.bg} c={BUS.color} border={`1px solid ${BUS.border}`}>🚌 Bus 1</Chip>}
-                            {ev.bus2&&<Chip bg={BUS.bg} c={BUS.color} border={`1px solid ${BUS.border}`}>🚌 Bus 2</Chip>}
-                          </div>
-                          <div style={{color:B.midGrey,fontSize:12}}>⏰ {safeStr(ev.time)} {ev.endTime ? `- ${safeStr(ev.endTime)}` : ""} Uhr · 📍 {safeStr(ev.location)}</div>
-                          {ev.notes&&<div style={{fontSize:12,color:B.charcoal,marginTop:2,fontStyle:"italic",fontFamily:"'Barlow',sans-serif"}}>{safeStr(ev.notes)}</div>}
-                          
-                          {canEditEvents && Array.isArray(ev.declines) && ev.declines.length > 0 && (
-                            <div style={{marginTop: 6, fontSize: 12, color: B.red, fontFamily:"'Barlow',sans-serif"}}>
-                              <strong>❌ {ev.declines.length} Absage(n):</strong> {ev.declines.filter(n=>typeof n==='string').join(", ")}
-                            </div>
-                          )}
-                        </div>
-                        <div className="schedule-actions">
-                          <button className="btn btn-ghost" style={{padding:"5px 10px", fontSize:11, color: hasDeclined ? B.charcoal : B.red, background: hasDeclined ? B.lightGrey : B.redLight}} onClick={()=>toggleDecline(ev)}>
-                            {hasDeclined ? "✅ Doch dabei" : "❌ Ich fehle"}
-                          </button>
-                          {canEditEvents&&<div style={{display:"flex",gap:6}}><button className="btn btn-edit" style={{background:"#25D366", color:"white"}} onClick={()=>shareEventWhatsApp(ev)}>📲 WA</button><button className="btn btn-edit" onClick={()=>openEditEvent(ev)}>✏️</button><button className="btn btn-danger" onClick={()=>deleteEvent(ev.id)}>🗑️</button></div>}
-                        </div>
-                      </div>
-                    );
-                  })
-              }
+              {upcoming.length===0 ? <div style={{textAlign:"center",color:B.midGrey,padding:48}}>Keine Termine für diese Auswahl</div> : upcoming.map(ev=>{
+                if (!ev) return null; const t=typeOf(ev.type); const sd=safeDateObj(ev.date); const hasBus=ev.bus1||ev.bus2; const myProfile = allUsers.find(u => u.id === user?.uid); const myName = myProfile?.name || user?.email; const hasDeclined = Array.isArray(ev.declines) && ev.declines.includes(myName);
+                return (
+                  <div key={ev.id || Math.random()} className="card schedule-grid" onMouseEnter={e=>e.currentTarget.style.borderColor=hasBus?BUS.color:t.color} onMouseLeave={e=>e.currentTarget.style.borderColor=B.lightGrey}>
+                    <div style={{textAlign:"center"}}><div style={{fontSize:24,fontWeight:900,color:hasBus?BUS.color:t.color,lineHeight:1}}>{sd.day}</div><div style={{fontSize:11,color:B.midGrey,fontWeight:700}}>{sd.month}</div></div>
+                    <div style={{width:3,background:hasBus?BUS.color:t.color,borderRadius:2,alignSelf:"stretch"}}/>
+                    <div style={{flex: 1}}>
+                      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3,flexWrap:"wrap"}}><span style={{fontWeight:800,fontSize:16}}>{safeStr(ev.title)}</span><Chip bg={t.bg} c={t.color}>{t.label}</Chip>{ev.team&&<Chip bg={B.anthracite+"11"} c={B.charcoal}>{safeStr(ev.team)}</Chip>}{ev.bus1&&<Chip bg={BUS.bg} c={BUS.color} border={`1px solid ${BUS.border}`}>🚌 Bus 1</Chip>}{ev.bus2&&<Chip bg={BUS.bg} c={BUS.color} border={`1px solid ${BUS.border}`}>🚌 Bus 2</Chip>}</div>
+                      <div style={{color:B.midGrey,fontSize:12}}>⏰ {safeStr(ev.time)} {ev.endTime ? `- ${safeStr(ev.endTime)}` : ""} Uhr · 📍 {safeStr(ev.location)}</div>
+                      {ev.notes&&<div style={{fontSize:12,color:B.charcoal,marginTop:2,fontStyle:"italic",fontFamily:"'Barlow',sans-serif"}}>{safeStr(ev.notes)}</div>}
+                      {canEditEvents && Array.isArray(ev.declines) && ev.declines.length > 0 && (<div style={{marginTop: 6, fontSize: 12, color: B.red, fontFamily:"'Barlow',sans-serif"}}><strong>❌ {ev.declines.length} Absage(n):</strong> {ev.declines.filter(n=>typeof n==='string').join(", ")}</div>)}
+                    </div>
+                    <div className="schedule-actions">
+                      <button className="btn btn-ghost" style={{padding:"5px 10px", fontSize:11, color: hasDeclined ? B.charcoal : B.red, background: hasDeclined ? B.lightGrey : B.redLight}} onClick={()=>toggleDecline(ev)}>{hasDeclined ? "✅ Doch dabei" : "❌ Ich fehle"}</button>
+                      {canEditEvents&&<div style={{display:"flex",gap:6}}><button className="btn btn-edit" style={{background:"#25D366", color:"white"}} onClick={()=>shareEventWhatsApp(ev)}>📲 WA</button><button className="btn btn-edit" onClick={()=>openEditEvent(ev)}>✏️</button><button className="btn btn-danger" onClick={()=>deleteEvent(ev.id)}>🗑️</button></div>}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -1204,10 +852,7 @@ export default function TVHindelangApp() {
                 if (!ti) return null;
                 return (
                 <div key={ti.id || Math.random()} className="team-card" onClick={()=>setSelectedTeam(ti)}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
-                    <div style={{fontSize:22,fontWeight:900,letterSpacing:1}}>{safeStr(ti.name)}</div>
-                    <span style={{display:"inline-block",padding:"2px 9px",borderRadius:20,fontSize:11,fontWeight:700,background:B.tealLight,color:B.teal}}>{safeStr(ti.jahrgang)}</span>
-                  </div>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}><div style={{fontSize:22,fontWeight:900,letterSpacing:1}}>{safeStr(ti.name)}</div><span style={{display:"inline-block",padding:"2px 9px",borderRadius:20,fontSize:11,fontWeight:700,background:B.tealLight,color:B.teal}}>{safeStr(ti.jahrgang)}</span></div>
                   <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif",marginBottom:4}}>👤 <strong>Trainer:</strong> {getTrainerNames(ti)}</div>
                   <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif"}}>⏰ {safeStr(ti.training)}</div>
                   <div style={{marginTop:12,fontSize:11,color:B.teal,fontWeight:700}}>Details →</div>
@@ -1221,44 +866,26 @@ export default function TVHindelangApp() {
             <button className="btn btn-ghost" style={{marginBottom:20}} onClick={()=>setSelectedTeam(null)}>← Zurück</button>
             <div className="card" style={{padding:"28px 32px"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:24}}>
-                <div>
-                  <div style={{fontSize:32,fontWeight:900,letterSpacing:2,textTransform:"uppercase"}}>{safeStr(selectedTeam.name)}</div>
-                  <span style={{display:"inline-block",padding:"2px 9px",borderRadius:20,fontSize:11,fontWeight:700,background:B.tealLight,color:B.teal,marginTop:6}}>{safeStr(selectedTeam.jahrgang)}</span>
-                </div>
+                <div><div style={{fontSize:32,fontWeight:900,letterSpacing:2,textTransform:"uppercase"}}>{safeStr(selectedTeam.name)}</div><span style={{display:"inline-block",padding:"2px 9px",borderRadius:20,fontSize:11,fontWeight:700,background:B.tealLight,color:B.teal,marginTop:6}}>{safeStr(selectedTeam.jahrgang)}</span></div>
                 {isAdmin&&<button className="btn btn-edit" onClick={()=>openEditTeam(selectedTeam)}>✏️ Bearbeiten</button>}
               </div>
-
               <div style={{display:"flex",gap:16,alignItems:"flex-start",padding:"14px 0",borderBottom:`1px solid ${B.lightGrey}`}}>
                 <div style={{width:36,height:36,borderRadius:"50%",background:B.tealLight,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>👤</div>
                 <div>
                   <div style={{fontSize:11,fontWeight:700,letterSpacing:1,color:B.midGrey,textTransform:"uppercase",marginBottom:4}}>Trainer</div>
                   {selectedTeam.trainers && Array.isArray(selectedTeam.trainers) && selectedTeam.trainers.length > 0 ? (
                     selectedTeam.trainers.map((tr, idx) => (
-                      <div key={idx} style={{marginBottom: idx === selectedTeam.trainers.length - 1 ? 0 : 10}}>
-                        <div style={{fontSize:15,fontWeight:700,fontFamily:"'Barlow',sans-serif"}}>{safeStr(tr?.name) || "N.N."}</div>
-                        {tr?.phone && (
-                          <div style={{fontSize:13,fontFamily:"'Barlow',sans-serif",marginTop:2}}>
-                            📞 <a href={`tel:${tr.phone}`} style={{color:B.teal,textDecoration:"none",fontWeight:500}}>{safeStr(tr.phone)}</a>
-                          </div>
-                        )}
-                      </div>
+                      <div key={idx} style={{marginBottom: idx === selectedTeam.trainers.length - 1 ? 0 : 10}}><div style={{fontSize:15,fontWeight:700,fontFamily:"'Barlow',sans-serif"}}>{safeStr(tr?.name) || "N.N."}</div>{tr?.phone && (<div style={{fontSize:13,fontFamily:"'Barlow',sans-serif",marginTop:2}}>📞 <a href={`tel:${tr.phone}`} style={{color:B.teal,textDecoration:"none",fontWeight:500}}>{safeStr(tr.phone)}</a></div>)}</div>
                     ))
-                  ) : (
-                    <div style={{fontSize:15,fontWeight:700,fontFamily:"'Barlow',sans-serif"}}>{safeStr(selectedTeam.trainer) || 'N.N.'}</div>
-                  )}
+                  ) : (<div style={{fontSize:15,fontWeight:700,fontFamily:"'Barlow',sans-serif"}}>{safeStr(selectedTeam.trainer) || 'N.N.'}</div>)}
                 </div>
               </div>
-
               {[{icon:"⏰",label:"Trainingszeiten",val:safeStr(selectedTeam.training)},{icon:"🎂",label:"Jahrgang",val:safeStr(selectedTeam.jahrgang)}].map(row=>(
                 <div key={row.label} style={{display:"flex",gap:16,alignItems:"center",padding:"14px 0",borderBottom:`1px solid ${B.lightGrey}`}}>
                   <div style={{width:36,height:36,borderRadius:"50%",background:B.tealLight,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>{row.icon}</div>
-                  <div>
-                    <div style={{fontSize:11,fontWeight:700,letterSpacing:1,color:B.midGrey,textTransform:"uppercase"}}>{row.label}</div>
-                    <div style={{fontSize:15,fontWeight:700,marginTop:1,fontFamily:"'Barlow',sans-serif"}}>{row.val}</div>
-                  </div>
+                  <div><div style={{fontSize:11,fontWeight:700,letterSpacing:1,color:B.midGrey,textTransform:"uppercase"}}>{row.label}</div><div style={{fontSize:15,fontWeight:700,marginTop:1,fontFamily:"'Barlow',sans-serif"}}>{row.val}</div></div>
                 </div>
               ))}
-
               <div style={{marginTop:20}}>
                 <div style={{fontSize:12,fontWeight:700,letterSpacing:1,color:B.midGrey,textTransform:"uppercase",marginBottom:10}}>Nächste Termine</div>
                 {events.filter(e=>e && e.team===selectedTeam.name&&(e.date||"")>=todayStr).sort((a,b)=>safeStr(a.date).localeCompare(safeStr(b.date))).slice(0,4).map(ev=><EventCard key={ev.id || Math.random()} ev={ev} controls={false}/>)}
@@ -1268,95 +895,55 @@ export default function TVHindelangApp() {
           </div>
         )}
 
-        {/* ════ MESSAGES (FÜR ALLE) ════ */}
+        {/* ════ MESSAGES ════ */}
         {view==="messages"&&(
           <div style={{maxWidth:1100,margin:"0 auto"}}>
             <div className="chat-layout">
               <div className={`chat-sidebar ${activeThread ? 'mobile-hidden' : ''}`} style={{borderRight:`1.5px solid ${B.lightGrey}`,background:B.offWhite, display: "flex", flexDirection: "column"}}>
-                <div style={{padding:"16px 14px",borderBottom:`1.5px solid ${B.lightGrey}`,background:B.white,flexShrink:0}}>
-                  <div style={{fontSize:15,fontWeight:900,letterSpacing:1,textTransform:"uppercase"}}>Nachrichten</div>
-                </div>
+                <div style={{padding:"16px 14px",borderBottom:`1.5px solid ${B.lightGrey}`,background:B.white,flexShrink:0}}><div style={{fontSize:15,fontWeight:900,letterSpacing:1,textTransform:"uppercase"}}>Nachrichten</div></div>
                 <div style={{flex:1,overflow:"auto"}}>
-                  {visibleThreads.length === 0 && (
-                    <div style={{padding: 20, textAlign: "center", color: B.midGrey, fontSize: 13}}>Keine aktiven Chats.</div>
-                  )}
+                  {visibleThreads.length === 0 && (<div style={{padding: 20, textAlign: "center", color: B.midGrey, fontSize: 13}}>Keine aktiven Chats.</div>)}
                   {visibleThreads.map(th=>{
                     if (!th) return null;
-                    const last = Array.isArray(th.messages) && th.messages.length > 0 ? th.messages[th.messages.length - 1] : null;
-                    const isActive=activeThread?.id===th.id;
-                    const isUnread = checkUnread(th);
-                    
+                    const last = Array.isArray(th.messages) && th.messages.length > 0 ? th.messages[th.messages.length - 1] : null; const isActive=activeThread?.id===th.id; const isUnread = checkUnread(th);
                     let displayLabel = safeStr(th.label);
-                    if (th.type === "direct") {
-                       const otherId = Array.isArray(th.participants) ? (th.participants.find(id => id !== user.uid) || user.uid) : user.uid;
-                       const otherUser = allUsers.find(u => u.id === otherId);
-                       displayLabel = otherUser ? safeStr(otherUser.name || otherUser.email) : "Benutzer";
-                    }
-
+                    if (th.type === "direct") { const otherId = Array.isArray(th.participants) ? (th.participants.find(id => id !== user.uid) || user.uid) : user.uid; const otherUser = allUsers.find(u => u.id === otherId); displayLabel = otherUser ? safeStr(otherUser.name || otherUser.email) : "Benutzer"; }
                     return (
                       <div key={th.id || Math.random()} style={{padding:"11px 14px",display:"flex",gap:10,alignItems:"center",cursor:"pointer",background:isActive?B.tealLight:"transparent",borderBottom:`1px solid ${B.lightGrey}`,transition:"background .15s"}} onClick={()=>openChat(th)}>
-                        <div style={{width:38,height:38,borderRadius:th.type==="group"?"10px":"50%",background:`linear-gradient(135deg,${B.teal},${B.tealDark})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,color:"white",fontWeight:800,flexShrink:0}}>
-                          {th.type==="group"?"👥":safeStr(displayLabel).slice(0,2).toUpperCase()}
-                        </div>
-                        <div style={{flex:1,minWidth:0}}>
-                          <div style={{fontWeight:isUnread?900:700,fontSize:14,color:isActive?B.teal:B.anthracite,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{displayLabel}</div>
-                          <div style={{fontSize:11,color:isUnread?B.anthracite:B.midGrey,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",fontWeight:isUnread?700:400}}>
-                            {last ? `${safeStr(last.from)}: ${safeStr(last.text)}` : "Noch keine Nachrichten"}
-                          </div>
-                        </div>
+                        <div style={{width:38,height:38,borderRadius:th.type==="group"?"10px":"50%",background:`linear-gradient(135deg,${B.teal},${B.tealDark})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,color:"white",fontWeight:800,flexShrink:0}}>{th.type==="group"?"👥":safeStr(displayLabel).slice(0,2).toUpperCase()}</div>
+                        <div style={{flex:1,minWidth:0}}><div style={{fontWeight:isUnread?900:700,fontSize:14,color:isActive?B.teal:B.anthracite,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{displayLabel}</div><div style={{fontSize:11,color:isUnread?B.anthracite:B.midGrey,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",fontWeight:isUnread?700:400}}>{last ? `${safeStr(last.from)}: ${safeStr(last.text)}` : "Noch keine Nachrichten"}</div></div>
                         {isUnread && <div className="unread-dot" />}
                       </div>
                     );
                   })}
                 </div>
-                <div style={{padding:"12px 14px",borderTop:`1.5px solid ${B.lightGrey}`,background:B.white,flexShrink:0}}>
-                  <button className="btn btn-primary" style={{width:"100%",fontSize:12,padding:9}} onClick={()=>setShowNewThread(true)}>+ Neuer Chat</button>
-                </div>
+                <div style={{padding:"12px 14px",borderTop:`1.5px solid ${B.lightGrey}`,background:B.white,flexShrink:0}}><button className="btn btn-primary" style={{width:"100%",fontSize:12,padding:9}} onClick={()=>setShowNewThread(true)}>+ Neuer Chat</button></div>
               </div>
-              
               <div className={`chat-main ${!activeThread ? 'mobile-hidden' : ''}`} style={{background:B.white, display:"flex", flexDirection:"column"}}>
                 {activeThread ? (
                   <>
                     <div style={{padding:"14px 20px",borderBottom:`1.5px solid ${B.lightGrey}`,display:"flex",alignItems:"center",gap:12,background:B.white,flexShrink:0}}>
                       <button className="mobile-back-btn" onClick={() => setActiveThread(null)}>←</button>
-                      <div style={{width:38,height:38,borderRadius:activeThread.type==="group"?"10px":"50%",background:`linear-gradient(135deg,${B.teal},${B.tealDark})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,color:"white",fontWeight:800}}>
-                        {activeThread.type==="group"?"👥":safeStr(activeThread.label).slice(0,2).toUpperCase()}
-                      </div>
-                      <div>
-                        <div style={{fontWeight:800,fontSize:15}}>
-                          {activeThread.type === "direct" 
-                            ? safeStr(allUsers.find(u => u.id === (Array.isArray(activeThread.participants) ? activeThread.participants.find(id => id !== user.uid) : user.uid))?.name || "Benutzer")
-                            : safeStr(activeThread.label)}
-                        </div>
-                        <div style={{fontSize:11,color:B.midGrey}}>{activeThread.type==="group"?`Gruppen-Chat · ${safeStr(activeThread.team)}`:"Direktnachricht"}</div>
-                      </div>
+                      <div style={{width:38,height:38,borderRadius:activeThread.type==="group"?"10px":"50%",background:`linear-gradient(135deg,${B.teal},${B.tealDark})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,color:"white",fontWeight:800}}>{activeThread.type==="group"?"👥":safeStr(activeThread.label).slice(0,2).toUpperCase()}</div>
+                      <div><div style={{fontWeight:800,fontSize:15}}>{activeThread.type === "direct" ? safeStr(allUsers.find(u => u.id === (Array.isArray(activeThread.participants) ? activeThread.participants.find(id => id !== user.uid) : user.uid))?.name || "Benutzer") : safeStr(activeThread.label)}</div><div style={{fontSize:11,color:B.midGrey}}>{activeThread.type==="group"?`Gruppen-Chat · ${safeStr(activeThread.team)}`:"Direktnachricht"}</div></div>
                     </div>
                     <div style={{flex:1,overflow:"auto",padding:20,display:"flex",flexDirection:"column",gap:10,background:B.offWhite}}>
                       {(!Array.isArray(activeThread.messages)||activeThread.messages.length===0)&&<div style={{textAlign:"center",color:B.midGrey,padding:"40px 0",fontSize:14}}>Noch keine Nachrichten</div>}
                       {Array.isArray(activeThread.messages) && activeThread.messages.map((msg,i)=>{
-                        if (!msg) return null;
-                        const myProfile = allUsers.find(u => u.id === user.uid);
-                        const isMe = msg.from === (myProfile?.name || user.email);
+                        if (!msg) return null; const myProfile = allUsers.find(u => u.id === user.uid); const isMe = msg.from === (myProfile?.name || user.email);
                         return (
                           <div key={i} style={{display:"flex",flexDirection:"column",alignItems:isMe?"flex-end":"flex-start"}}>
                             {!isMe&&<div style={{fontSize:11,color:B.midGrey,marginBottom:2,fontWeight:600}}>{safeStr(msg.from)}</div>}
-                            <div className={isMe?"chat-me":"chat-them"}>{safeStr(msg.text)}</div>
-                            <div style={{fontSize:10,color:B.midGrey,marginTop:3}}>{safeStr(msg.time)}</div>
+                            <div className={isMe?"chat-me":"chat-them"}>{safeStr(msg.text)}</div><div style={{fontSize:10,color:B.midGrey,marginTop:3}}>{safeStr(msg.time)}</div>
                           </div>
                         );
                       })}
                       <div ref={chatEndRef}/>
                     </div>
-                    <div style={{padding:"12px 16px",borderTop:`1.5px solid ${B.lightGrey}`,display:"flex",gap:10,background:B.white,flexShrink:0}}>
-                      <input className="input" placeholder="Nachricht schreiben..." value={chatInput} onChange={e=>setChatInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&sendMessage()} style={{flex:1}}/>
-                      <button className="btn btn-primary" style={{flexShrink:0,padding:"9px 20px"}} onClick={sendMessage}>➤</button>
-                    </div>
+                    <div style={{padding:"12px 16px",borderTop:`1.5px solid ${B.lightGrey}`,display:"flex",gap:10,background:B.white,flexShrink:0}}><input className="input" placeholder="Nachricht schreiben..." value={chatInput} onChange={e=>setChatInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&sendMessage()} style={{flex:1}}/><button className="btn btn-primary" style={{flexShrink:0,padding:"9px 20px"}} onClick={sendMessage}>➤</button></div>
                   </>
                 ) : (
-                  <div style={{display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12,color:B.midGrey,background:B.offWhite,height:"100%"}}>
-                    <div style={{fontSize:48}}>💬</div>
-                    <div style={{fontSize:16,fontWeight:700}}>Chat auswählen</div>
-                  </div>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12,color:B.midGrey,background:B.offWhite,height:"100%"}}><div style={{fontSize:48}}>💬</div><div style={{fontSize:16,fontWeight:700}}>Chat auswählen</div></div>
                 )}
               </div>
             </div>
@@ -1368,30 +955,19 @@ export default function TVHindelangApp() {
           <div style={{maxWidth:1040,margin:"0 auto"}}>
             <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:6}}>
               <div style={{width:40,height:40,borderRadius:10,background:isAdmin?B.amberLight:B.tealLight,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22}}>⚙️</div>
-              <div>
-                <h1 style={{fontSize:28,fontWeight:900,letterSpacing:2,textTransform:"uppercase",color:isAdmin?B.amber:B.teal}}>
-                  {isAdmin ? "Admin-Bereich" : "Trainer-Bereich"}
-                </h1>
-                <div style={{fontSize:12,color:B.midGrey}}>Eingeloggt als: {safeStr(user?.email)}</div>
-              </div>
+              <div><h1 style={{fontSize:28,fontWeight:900,letterSpacing:2,textTransform:"uppercase",color:isAdmin?B.amber:B.teal}}>{isAdmin ? "Admin-Bereich" : "Trainer-Bereich"}</h1><div style={{fontSize:12,color:B.midGrey}}>Eingeloggt als: {safeStr(user?.email)}</div></div>
             </div>
-            
             <div className="admin-tabs-container">
               <div style={{display:"flex",borderBottom:`1.5px solid ${B.lightGrey}`,marginBottom:24,marginTop:16,background:B.white,borderRadius:"8px 8px 0 0", width: "max-content", minWidth: "100%"}}>
-                {getAdminTabs().map(tab=>(
-                  <button key={tab.id} className={`admin-tab ${adminSection===tab.id?"active":""}`} onClick={()=>setAdminSection(tab.id)}>{tab.label}</button>
-                ))}
+                {getAdminTabs().map(tab=>(<button key={tab.id} className={`admin-tab ${adminSection===tab.id?"active":""}`} onClick={()=>setAdminSection(tab.id)}>{tab.label}</button>))}
               </div>
             </div>
 
             {adminSection==="teams"&&isAdmin&&(
               <div>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-                  <div style={{fontSize:16,fontWeight:800,letterSpacing:1,textTransform:"uppercase"}}>Mannschaften ({(teams||[]).length})</div>
-                  <button className="btn btn-primary" onClick={openAddTeam}>+ Team</button>
-                </div>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}><div style={{fontSize:16,fontWeight:800,letterSpacing:1,textTransform:"uppercase"}}>Mannschaften ({(teams||[]).length})</div><button className="btn btn-primary" onClick={openAddTeam}>+ Team</button></div>
                 <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                  {(!teams || teams.length === 0) && <div style={{color:B.midGrey, fontSize:14}}>Keine Mannschaften gefunden. Leg eine neue an!</div>}
+                  {(!teams || teams.length === 0) && <div style={{color:B.midGrey, fontSize:14}}>Keine Mannschaften gefunden.</div>}
                   {(teams||[]).map(t=>{
                     if (!t || typeof t !== 'object') return null;
                     return (
@@ -1400,10 +976,7 @@ export default function TVHindelangApp() {
                       <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif"}}>👤 {getTrainerNames(t)}</div>
                       <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif"}}>⏰ {safeStr(t.training) || "Keine Zeit"}</div>
                       <div style={{fontSize:13,color:B.midGrey,fontFamily:"'Barlow',sans-serif"}}>🎂 {safeStr(t.jahrgang) || "Kein Jahrgang"}</div>
-                      <div className="admin-list-actions">
-                        <button className="btn btn-edit" onClick={()=>openEditTeam(t)}>✏️</button>
-                        <button className="btn btn-danger" onClick={()=>deleteTeam(t.id)}>🗑️</button>
-                      </div>
+                      <div className="admin-list-actions"><button className="btn btn-edit" onClick={()=>openEditTeam(t)}>✏️</button><button className="btn btn-danger" onClick={()=>deleteTeam(t.id)}>🗑️</button></div>
                     </div>
                   )})}
                 </div>
@@ -1414,40 +987,20 @@ export default function TVHindelangApp() {
               <div>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16, flexWrap: "wrap", gap: 10}}>
                   <div style={{fontSize:16,fontWeight:800,letterSpacing:1,textTransform:"uppercase"}}>Termine ({(events||[]).length})</div>
-                  
-                  <div style={{display:"flex", gap: 10}}>
-                    <input type="file" accept=".csv" style={{display: "none"}} ref={csvInputRef} onChange={handleCSVUpload} />
-                    <button className="btn btn-ghost" onClick={() => csvInputRef.current?.click()} disabled={isImporting}>
-                      {isImporting ? "⏳ Lädt..." : "📥 CSV"}
-                    </button>
-                    <button className="btn btn-primary" onClick={()=>openAddEvent()}>+ Termin</button>
-                  </div>
-                  
+                  <div style={{display:"flex", gap: 10}}><input type="file" accept=".csv" style={{display: "none"}} ref={csvInputRef} onChange={handleCSVUpload} /><button className="btn btn-ghost" onClick={() => csvInputRef.current?.click()} disabled={isImporting}>{isImporting ? "⏳ Lädt..." : "📥 CSV"}</button><button className="btn btn-primary" onClick={()=>openAddEvent()}>+ Termin</button></div>
                 </div>
                 <div style={{display:"flex",flexDirection:"column",gap:8}}>
                   {[...(events||[])].sort((a,b)=>safeStr(a?.date).localeCompare(safeStr(b?.date))).map(ev=>{
-                    if (!ev || typeof ev !== 'object') return null;
-                    const t=typeOf(ev.type); const sd = safeDateObj(ev.date);
+                    if (!ev || typeof ev !== 'object') return null; const t=typeOf(ev.type); const sd = safeDateObj(ev.date);
                     return (
                       <div key={ev.id || Math.random()} className="card schedule-grid">
-                        <div style={{textAlign:"center"}}>
-                          <div style={{fontSize:20,fontWeight:900,color:t.color,lineHeight:1}}>{sd.day}</div>
-                          <div style={{fontSize:10,color:B.midGrey,fontWeight:700}}>{sd.month} {sd.year}</div>
-                        </div>
+                        <div style={{textAlign:"center"}}><div style={{fontSize:20,fontWeight:900,color:t.color,lineHeight:1}}>{sd.day}</div><div style={{fontSize:10,color:B.midGrey,fontWeight:700}}>{sd.month} {sd.year}</div></div>
                         <div style={{width:3,background:t.color,borderRadius:2,alignSelf:"stretch"}}/>
                         <div>
-                          <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:3}}>
-                            <span style={{fontWeight:800,fontSize:14}}>{safeStr(ev.title) || "Ohne Titel"}</span>
-                            <Chip bg={t.bg} c={t.color}>{safeStr(t.label)}</Chip>
-                            <Chip bg={B.anthracite+"11"} c={B.charcoal}>{safeStr(ev.team) || "Kein Team"}</Chip>
-                          </div>
+                          <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:3}}><span style={{fontWeight:800,fontSize:14}}>{safeStr(ev.title) || "Ohne Titel"}</span><Chip bg={t.bg} c={t.color}>{safeStr(t.label)}</Chip><Chip bg={B.anthracite+"11"} c={B.charcoal}>{safeStr(ev.team) || "Kein Team"}</Chip></div>
                           <div style={{fontSize:12,color:B.midGrey}}>⏰ {safeStr(ev.time)} {ev.endTime ? `- ${safeStr(ev.endTime)}` : ""} · 📍 {safeStr(ev.location) || "Ohne Ort"}</div>
                         </div>
-                        <div className="schedule-actions">
-                          <button className="btn btn-edit" style={{background:"#25D366", color:"white"}} onClick={()=>shareEventWhatsApp(ev)} title="In WhatsApp teilen">📲 WA</button>
-                          <button className="btn btn-edit" onClick={()=>openEditEvent(ev)}>✏️</button>
-                          <button className="btn btn-danger" onClick={()=>deleteEvent(ev.id)}>🗑️</button>
-                        </div>
+                        <div className="schedule-actions"><button className="btn btn-edit" style={{background:"#25D366", color:"white"}} onClick={()=>shareEventWhatsApp(ev)}>📲 WA</button><button className="btn btn-edit" onClick={()=>openEditEvent(ev)}>✏️</button><button className="btn btn-danger" onClick={()=>deleteEvent(ev.id)}>🗑️</button></div>
                       </div>
                     );
                   })}
@@ -1457,10 +1010,7 @@ export default function TVHindelangApp() {
 
             {adminSection==="news"&&canEditNews&&(
               <div>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-                  <div style={{fontSize:16,fontWeight:800,letterSpacing:1,textTransform:"uppercase"}}>News ({(news||[]).length})</div>
-                  <button className="btn btn-primary" onClick={openAddNews}>+ News</button>
-                </div>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}><div style={{fontSize:16,fontWeight:800,letterSpacing:1,textTransform:"uppercase"}}>News ({(news||[]).length})</div><button className="btn btn-primary" onClick={openAddNews}>+ News</button></div>
                 <div style={{display:"flex",flexDirection:"column",gap:10}}>
                   {(news||[]).map(n=>{
                     if (!n || typeof n !== 'object') return null;
@@ -1470,21 +1020,10 @@ export default function TVHindelangApp() {
                         <div style={{flex:1}}>
                           <div style={{fontWeight:800,fontSize:16,marginBottom:4}}>{safeStr(n.title) || "Ohne Titel"}</div>
                           <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif",lineHeight:1.5,marginBottom:6}}>{safeStr(n.body).slice(0,90)}{safeStr(n.body).length>90?"…":""}</div>
-                          
-                          {/* BILD-VORSCHAU FÜR BASE64 BILDER */}
-                          {n.fileUrl && n.fileUrl.startsWith("data:image") ? (
-                            <a href={n.fileUrl} target="_blank" rel="noopener noreferrer" style={{display:"block", marginTop:8, marginBottom:6}}>
-                              <img src={n.fileUrl} alt="Anhang" style={{maxWidth:"100%", maxHeight:120, objectFit:"cover", borderRadius:6, border:`1px solid ${B.lightGrey}`}} />
-                            </a>
-                          ) : null}
-
+                          {n.fileUrl && n.fileUrl.startsWith("data:image") ? ( <a href={n.fileUrl} target="_blank" rel="noopener noreferrer" style={{display:"block", marginTop:8, marginBottom:6}}><img src={n.fileUrl} alt="Anhang" style={{maxWidth:"100%", maxHeight:120, objectFit:"cover", borderRadius:6, border:`1px solid ${B.lightGrey}`}} /></a>) : null}
                           <div style={{fontSize:11,color:B.midGrey,fontWeight:600}}>{safeStr(n.date)} · {safeStr(n.author)}</div>
                         </div>
-                        <div className="event-card-actions">
-                          <button className="btn btn-edit" style={{background:"#25D366", color:"white"}} onClick={()=>shareNewsWhatsApp(n)} title="In WhatsApp teilen">📲 WA</button>
-                          <button className="btn btn-edit" onClick={()=>openEditEvent(n)}>✏️</button>
-                          <button className="btn btn-danger" onClick={()=>deleteNews(n.id)}>🗑️</button>
-                        </div>
+                        <div className="event-card-actions"><button className="btn btn-edit" style={{background:"#25D366", color:"white"}} onClick={()=>shareNewsWhatsApp(n)}>📲 WA</button><button className="btn btn-edit" onClick={()=>openEditEvent(n)}>✏️</button><button className="btn btn-danger" onClick={()=>deleteNews(n.id)}>🗑️</button></div>
                       </div>
                     </div>
                   )})}
@@ -1492,44 +1031,21 @@ export default function TVHindelangApp() {
               </div>
             )}
 
-            {/* Benutzerverwaltung Content */}
             {adminSection==="users"&&isAdmin&&(
               <div>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-                  <div style={{fontSize:16,fontWeight:800,letterSpacing:1,textTransform:"uppercase"}}>Benutzer ({(allUsers||[]).length})</div>
-                  <button className="btn btn-primary" onClick={openAddUser}>+ Nutzer</button>
-                </div>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}><div style={{fontSize:16,fontWeight:800,letterSpacing:1,textTransform:"uppercase"}}>Benutzer ({(allUsers||[]).length})</div><button className="btn btn-primary" onClick={openAddUser}>+ Nutzer</button></div>
                 <div style={{display:"flex",flexDirection:"column",gap:8}}>
                   {(allUsers||[]).map(u=>{
                     if (!u || typeof u !== 'object') return null;
-                    const getRoleLabel = (r) => {
-                      if(r==="admin") return "Admin";
-                      if(r==="trainer") return "Trainer";
-                      if(r==="parent") return "Eltern";
-                      return "Aktiv";
-                    };
-                    const getRoleColor = (r) => {
-                      if(r==="admin") return { bg: B.amberLight, c: B.amber };
-                      if(r==="trainer") return { bg: B.tealLight, c: B.teal };
-                      if(r==="parent") return { bg: B.offWhite, c: B.midGrey };
-                      return { bg: B.greenLight, c: B.green };
-                    };
+                    const getRoleLabel = (r) => { if(r==="admin") return "Admin"; if(r==="trainer") return "Trainer"; if(r==="parent") return "Eltern"; return "Aktiv"; };
+                    const getRoleColor = (r) => { if(r==="admin") return { bg: B.amberLight, c: B.amber }; if(r==="trainer") return { bg: B.tealLight, c: B.teal }; if(r==="parent") return { bg: B.offWhite, c: B.midGrey }; return { bg: B.greenLight, c: B.green }; };
                     const rc = getRoleColor(u.role);
-                    
                     return (
                       <div key={u.id || Math.random()} className="card admin-list-item" style={{gridTemplateColumns:"1fr 1fr auto auto"}}>
-                        <div style={{fontWeight:800,fontSize:16}}>
-                          {u.name ? safeStr(u.name) : <span style={{color:B.midGrey,fontStyle:"italic"}}>Kein Name</span>}
-                          {Array.isArray(u.assignedTeams) && u.assignedTeams.length > 0 && <div style={{fontSize:11, color:B.midGrey, marginTop:2}}>Zugeordnet: {u.assignedTeams.map(x=>safeStr(x)).join(", ")}</div>}
-                        </div>
+                        <div style={{fontWeight:800,fontSize:16}}>{u.name ? safeStr(u.name) : <span style={{color:B.midGrey,fontStyle:"italic"}}>Kein Name</span>}{Array.isArray(u.assignedTeams) && u.assignedTeams.length > 0 && <div style={{fontSize:11, color:B.midGrey, marginTop:2}}>Zugeordnet: {u.assignedTeams.map(x=>safeStr(x)).join(", ")}</div>}</div>
                         <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif", overflow:"hidden", textOverflow:"ellipsis"}}>✉️ {safeStr(u.email || u.id)}</div>
-                        <div>
-                          <Chip bg={rc.bg} c={rc.c}>{safeStr(getRoleLabel(u.role))}</Chip>
-                        </div>
-                        <div className="admin-list-actions">
-                          <button className="btn btn-edit" onClick={()=>openEditUser(u)}>✏️ Bearbeiten</button>
-                          <button className="btn btn-danger" onClick={()=>deleteUser(u.id)}>🗑️</button>
-                        </div>
+                        <div><Chip bg={rc.bg} c={rc.c}>{safeStr(getRoleLabel(u.role))}</Chip></div>
+                        <div className="admin-list-actions"><button className="btn btn-edit" onClick={()=>openEditUser(u)}>✏️ Bearbeiten</button><button className="btn btn-danger" onClick={()=>deleteUser(u.id)}>🗑️</button></div>
                       </div>
                     )
                   })}
@@ -1558,23 +1074,9 @@ export default function TVHindelangApp() {
       {/* ── MOBILE BOTTOM NAV ── */}
       <nav className="bottom-nav">
         {NAV.map(({id,icon,label,badge})=>(
-          <button key={id} className={`bottom-nav-item ${view===id?"active":""}`} onClick={()=>{setView(id);setSelectedTeam(null); setActiveThread(null);}}>
-            <div className="bottom-nav-icon" style={{position:"relative"}}>
-              {icon}
-              {badge && <div className="nav-badge-mobile" />}
-            </div>
-            {label}
-          </button>
+          <button key={id} className={`bottom-nav-item ${view===id?"active":""}`} onClick={()=>{setView(id);setSelectedTeam(null); setActiveThread(null);}}><div className="bottom-nav-icon" style={{position:"relative"}}>{icon}{badge && <div className="nav-badge-mobile" />}</div>{label}</button>
         ))}
-        {canAccessAdmin&&(
-          <button className={`bottom-nav-item ${view==="admin"?"active":""}`} onClick={()=>{
-            setView("admin");
-            if(isTrainer && !isAdmin && adminSection !== "events" && adminSection !== "news") setAdminSection("events");
-          }}>
-            <div className="bottom-nav-icon">⚙️</div>
-            Admin
-          </button>
-        )}
+        {canAccessAdmin&&(<button className={`bottom-nav-item ${view==="admin"?"active":""}`} onClick={()=>{setView("admin");if(isTrainer && !isAdmin && adminSection !== "events" && adminSection !== "news") setAdminSection("events");}}><div className="bottom-nav-icon">⚙️</div>Admin</button>)}
       </nav>
 
       {/* ════ EVENT MODAL ════ */}
@@ -1585,62 +1087,28 @@ export default function TVHindelangApp() {
             <h2 style={{fontSize:22,fontWeight:900,letterSpacing:1,textTransform:"uppercase",marginBottom:20}}>{editingEvent?"Termin bearbeiten":"Neuer Termin"}</h2>
             <div style={{display:"flex",flexDirection:"column",gap:13}}>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-                <div><label style={LBL}>Typ</label>
-                  <select className="input" value={eventForm.type} onChange={e=>setEventForm({...eventForm,type:e.target.value})}>
-                    {EVENT_TYPES.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}
-                  </select>
-                </div>
-                <div><label style={LBL}>Mannschaft</label>
-                  <select className="input" value={eventForm.team} onChange={e=>setEventForm({...eventForm,team:e.target.value})}>
-                    {teamNames.map(t=><option key={t} value={t}>{t}</option>)}
-                  </select>
-                </div>
+                <div><label style={LBL}>Typ</label><select className="input" value={eventForm.type} onChange={e=>setEventForm({...eventForm,type:e.target.value})}>{EVENT_TYPES.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}</select></div>
+                <div><label style={LBL}>Mannschaft</label><select className="input" value={eventForm.team} onChange={e=>setEventForm({...eventForm,team:e.target.value})}>{teamNames.map(t=><option key={t} value={t}>{t}</option>)}</select></div>
               </div>
-              <div><label style={LBL}>Titel *</label>
-                <input className="input" placeholder="z.B. Heimspiel vs. SV Musterstadt" value={eventForm.title} onChange={e=>setEventForm({...eventForm,title:e.target.value})}/>
-              </div>
-              
+              <div><label style={LBL}>Titel *</label><input className="input" placeholder="z.B. Heimspiel vs. SV Musterstadt" value={eventForm.title} onChange={e=>setEventForm({...eventForm,title:e.target.value})}/></div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}}>
-                <div><label style={LBL}>Datum *</label>
-                  <input className="input" type="date" value={eventForm.date} onChange={e=>setEventForm({...eventForm,date:e.target.value})}/>
-                </div>
-                <div><label style={LBL}>Startzeit</label>
-                  <input className="input" type="time" value={eventForm.time} onChange={e=>setEventForm({...eventForm,time:e.target.value})}/>
-                </div>
-                <div><label style={LBL}>Endzeit</label>
-                  <input className="input" type="time" value={eventForm.endTime} onChange={e=>setEventForm({...eventForm,endTime:e.target.value})}/>
-                </div>
+                <div><label style={LBL}>Datum *</label><input className="input" type="date" value={eventForm.date} onChange={e=>setEventForm({...eventForm,date:e.target.value})}/></div>
+                <div><label style={LBL}>Startzeit</label><input className="input" type="time" value={eventForm.time} onChange={e=>setEventForm({...eventForm,time:e.target.value})}/></div>
+                <div><label style={LBL}>Endzeit</label><input className="input" type="time" value={eventForm.endTime} onChange={e=>setEventForm({...eventForm,endTime:e.target.value})}/></div>
               </div>
-
               {!editingEvent && (
                 <div style={{marginTop: -4, background: eventForm.isRecurring ? B.tealLight : "transparent", padding: eventForm.isRecurring ? "10px 14px" : "0 4px", borderRadius: 8, transition: "all .2s"}}>
-                  <label style={{display:"flex", alignItems:"center", gap:8, fontSize:14, fontWeight:700, cursor:"pointer", color: eventForm.isRecurring ? B.tealDark : B.charcoal}}>
-                    <input type="checkbox" style={{width: 16, height: 16}} checked={eventForm.isRecurring} onChange={e=>setEventForm({...eventForm, isRecurring: e.target.checked})} />
-                    🔄 Wöchentlich wiederholen
-                  </label>
-                  {eventForm.isRecurring && (
-                     <div style={{marginTop: 10}}>
-                        <label style={LBL}>Letzter Termin am *</label>
-                        <input className="input" type="date" value={eventForm.recurringEndDate} onChange={e=>setEventForm({...eventForm, recurringEndDate: e.target.value})} />
-                     </div>
-                  )}
+                  <label style={{display:"flex", alignItems:"center", gap:8, fontSize:14, fontWeight:700, cursor:"pointer", color: eventForm.isRecurring ? B.tealDark : B.charcoal}}><input type="checkbox" style={{width: 16, height: 16}} checked={eventForm.isRecurring} onChange={e=>setEventForm({...eventForm, isRecurring: e.target.checked})} />🔄 Wöchentlich wiederholen</label>
+                  {eventForm.isRecurring && (<div style={{marginTop: 10}}><label style={LBL}>Letzter Termin am *</label><input className="input" type="date" value={eventForm.recurringEndDate} onChange={e=>setEventForm({...eventForm, recurringEndDate: e.target.value})} /></div>)}
                 </div>
               )}
-
-              <div><label style={LBL}>Ort</label>
-                <input className="input" placeholder="z.B. Sportplatz Hauptfeld" value={eventForm.location} onChange={e=>setEventForm({...eventForm,location:e.target.value})}/>
-              </div>
-              <div><label style={LBL}>Hinweise</label>
-                <textarea className="input" value={eventForm.notes} onChange={e=>setEventForm({...eventForm,notes:e.target.value})}/>
-              </div>
+              <div><label style={LBL}>Ort</label><input className="input" placeholder="z.B. Sportplatz Hauptfeld" value={eventForm.location} onChange={e=>setEventForm({...eventForm,location:e.target.value})}/></div>
+              <div><label style={LBL}>Hinweise</label><textarea className="input" value={eventForm.notes} onChange={e=>setEventForm({...eventForm,notes:e.target.value})}/></div>
               <div><label style={LBL}>🚌 Vereinsbus</label>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
                   {[["bus1","Bus 1"],["bus2","Bus 2"]].map(([key,label])=>(
-                    <div key={key} onClick={()=>setEventForm({...eventForm,[key]:!eventForm[key]})}
-                      style={{display:"flex",alignItems:"center",gap:10,padding:"10px 13px",borderRadius:8,border:`2px solid ${eventForm[key]?BUS.color:B.lightGrey}`,background:eventForm[key]?BUS.bg:B.white,cursor:"pointer",transition:"all .15s"}}>
-                      <div style={{width:20,height:20,borderRadius:5,border:`2px solid ${eventForm[key]?BUS.color:B.lightGrey}`,background:eventForm[key]?BUS.color:B.white,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                        {eventForm[key]&&<span style={{color:"white",fontSize:12,fontWeight:800}}>✓</span>}
-                      </div>
+                    <div key={key} onClick={()=>setEventForm({...eventForm,[key]:!eventForm[key]})} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 13px",borderRadius:8,border:`2px solid ${eventForm[key]?BUS.color:B.lightGrey}`,background:eventForm[key]?BUS.bg:B.white,cursor:"pointer",transition:"all .15s"}}>
+                      <div style={{width:20,height:20,borderRadius:5,border:`2px solid ${eventForm[key]?BUS.color:B.lightGrey}`,background:eventForm[key]?BUS.color:B.white,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{eventForm[key]&&<span style={{color:"white",fontSize:12,fontWeight:800}}>✓</span>}</div>
                       <span style={{fontSize:13,fontWeight:800,color:eventForm[key]?BUS.color:B.charcoal}}>{label}</span>
                     </div>
                   ))}
@@ -1648,9 +1116,7 @@ export default function TVHindelangApp() {
               </div>
               <div style={{display:"flex",gap:10,marginTop:4}}>
                 <button className="btn btn-ghost" style={{flex:1}} onClick={()=>{setShowEventModal(false); setNewsSaving(false);}}>Abbrechen</button>
-                <button className="btn btn-primary" style={{flex:2}} onClick={saveEvent} disabled={!eventForm.title || !eventForm.date || (eventForm.isRecurring && !eventForm.recurringEndDate)}>
-                  {editingEvent ? "✓ Speichern" : (eventForm.isRecurring ? "🔄 Serie erstellen" : "+ Erstellen")}
-                </button>
+                <button className="btn btn-primary" style={{flex:2}} onClick={saveEvent} disabled={!eventForm.title || !eventForm.date || (eventForm.isRecurring && !eventForm.recurringEndDate)}>{editingEvent ? "✓ Speichern" : (eventForm.isRecurring ? "🔄 Serie erstellen" : "+ Erstellen")}</button>
               </div>
             </div>
           </div>
@@ -1664,33 +1130,18 @@ export default function TVHindelangApp() {
             <div style={{height:4,background:`linear-gradient(90deg,${B.amber},${B.red})`,borderRadius:"4px 4px 0 0",margin:"-30px -30px 22px"}}/>
             <h2 style={{fontSize:22,fontWeight:900,letterSpacing:1,textTransform:"uppercase",marginBottom:20}}>{editingNews?"News bearbeiten":"Neue Ankündigung"}</h2>
             <div style={{display:"flex",flexDirection:"column",gap:12}}>
-              <div><label style={LBL}>Titel *</label>
-                <input className="input" value={newsForm.title} onChange={e=>setNewsForm({...newsForm,title:e.target.value})}/>
-              </div>
-              <div><label style={LBL}>Text *</label>
-                <textarea className="input" style={{minHeight:100}} value={newsForm.body} onChange={e=>setNewsForm({...newsForm,body:e.target.value})}/>
-              </div>
+              <div><label style={LBL}>Titel *</label><input className="input" value={newsForm.title} onChange={e=>setNewsForm({...newsForm,title:e.target.value})}/></div>
+              <div><label style={LBL}>Text *</label><textarea className="input" style={{minHeight:100}} value={newsForm.body} onChange={e=>setNewsForm({...newsForm,body:e.target.value})}/></div>
               
               <div><label style={LBL}>Bild-Anhang (nur JPG, PNG)</label>
-                <input className="input" type="file" accept="image/jpeg,image/png,image/gif,image/webp" 
-                  onChange={e=>setNewsForm({...newsForm, fileObj: e.target.files[0]})} />
-                {newsForm.fileName && !newsForm.fileObj && (
-                  <div style={{fontSize:12, color:B.charcoal, marginTop:6}}>
-                    Aktueller Anhang: <span style={{color:B.teal, fontWeight:700}}>Bild vorhanden</span>
-                  </div>
-                )}
-                {newsForm.fileObj && (
-                  <div style={{fontSize:12, color:B.charcoal, marginTop:6}}>
-                    Ausgewählt: <span style={{fontWeight:700}}>{newsForm.fileObj.name}</span>
-                  </div>
-                )}
+                <input className="input" type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>setNewsForm({...newsForm, fileObj: e.target.files[0]})} />
+                {newsForm.fileName && !newsForm.fileObj && (<div style={{fontSize:12, color:B.charcoal, marginTop:6}}>Aktueller Anhang: <span style={{color:B.teal, fontWeight:700}}>Bild vorhanden</span></div>)}
+                {newsForm.fileObj && (<div style={{fontSize:12, color:B.charcoal, marginTop:6}}>Ausgewählt: <span style={{fontWeight:700}}>{newsForm.fileObj.name}</span></div>)}
               </div>
 
               <div style={{display:"flex",gap:10,marginTop:8}}>
                 <button className="btn btn-ghost" style={{flex:1}} onClick={()=>{setShowNewsModal(false); setNewsSaving(false);}}>Abbrechen</button>
-                <button className="btn btn-primary" style={{flex:2}} onClick={saveNews} disabled={!newsForm.title||!newsForm.body||newsSaving}>
-                  {newsSaving ? "Wird verarbeitet..." : (editingNews ? "✓ Speichern" : "📢 Veröffentlichen")}
-                </button>
+                <button className="btn btn-primary" style={{flex:2}} onClick={saveNews} disabled={!newsForm.title||!newsForm.body||newsSaving}>{newsSaving ? "Wird verarbeitet..." : (editingNews ? "✓ Speichern" : "📢 Veröffentlichen")}</button>
               </div>
             </div>
           </div>
@@ -1705,39 +1156,21 @@ export default function TVHindelangApp() {
             <h2 style={{fontSize:22,fontWeight:900,letterSpacing:1,textTransform:"uppercase",marginBottom:20}}>{editingTeam?"Mannschaft bearbeiten":"Neue Mannschaft"}</h2>
             <div style={{display:"flex",flexDirection:"column",gap:13}}>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-                <div><label style={LBL}>Name *</label>
-                  <input className="input" placeholder="z.B. G-Jugend" value={teamForm.name} onChange={e=>setTeamForm({...teamForm,name:e.target.value})}/>
-                </div>
-                <div><label style={LBL}>Jahrgang</label>
-                  <input className="input" placeholder="z.B. 2021/2022" value={teamForm.jahrgang} onChange={e=>setTeamForm({...teamForm,jahrgang:e.target.value})}/>
-                </div>
+                <div><label style={LBL}>Name *</label><input className="input" placeholder="z.B. G-Jugend" value={teamForm.name} onChange={e=>setTeamForm({...teamForm,name:e.target.value})}/></div>
+                <div><label style={LBL}>Jahrgang</label><input className="input" placeholder="z.B. 2021/2022" value={teamForm.jahrgang} onChange={e=>setTeamForm({...teamForm,jahrgang:e.target.value})}/></div>
               </div>
-
               <div>
                 <label style={LBL}>Trainer & Betreuer</label>
                 {teamForm.trainers.map((tr, idx) => (
                   <div key={idx} style={{display:"flex", gap:8, marginBottom:8}}>
-                    <input className="input" placeholder="Name" value={tr.name} onChange={e => {
-                      const newTr = [...teamForm.trainers]; newTr[idx].name = e.target.value; setTeamForm({...teamForm, trainers: newTr});
-                    }} />
-                    <input className="input" placeholder="Telefon" value={tr.phone} onChange={e => {
-                      const newTr = [...teamForm.trainers]; newTr[idx].phone = e.target.value; setTeamForm({...teamForm, trainers: newTr});
-                    }} />
-                    {teamForm.trainers.length > 1 && (
-                      <button className="btn btn-danger" style={{padding:"0 12px", fontSize:14}} onClick={() => {
-                        const newTr = teamForm.trainers.filter((_, i) => i !== idx); setTeamForm({...teamForm, trainers: newTr});
-                      }}>X</button>
-                    )}
+                    <input className="input" placeholder="Name" value={tr.name} onChange={e => { const newTr = [...teamForm.trainers]; newTr[idx].name = e.target.value; setTeamForm({...teamForm, trainers: newTr}); }} />
+                    <input className="input" placeholder="Telefon" value={tr.phone} onChange={e => { const newTr = [...teamForm.trainers]; newTr[idx].phone = e.target.value; setTeamForm({...teamForm, trainers: newTr}); }} />
+                    {teamForm.trainers.length > 1 && (<button className="btn btn-danger" style={{padding:"0 12px", fontSize:14}} onClick={() => { const newTr = teamForm.trainers.filter((_, i) => i !== idx); setTeamForm({...teamForm, trainers: newTr}); }}>X</button>)}
                   </div>
                 ))}
-                <button className="btn btn-ghost" style={{fontSize:11, padding:"6px 12px", marginTop:2}} onClick={() => setTeamForm({...teamForm, trainers: [...teamForm.trainers, {name:"", phone:""}]})}>
-                  + Weiterer Trainer
-                </button>
+                <button className="btn btn-ghost" style={{fontSize:11, padding:"6px 12px", marginTop:2}} onClick={() => setTeamForm({...teamForm, trainers: [...teamForm.trainers, {name:"", phone:""}]})}>+ Weiterer Trainer</button>
               </div>
-
-              <div><label style={LBL}>Trainingszeiten</label>
-                <input className="input" placeholder="z.B. Di & Do 17:00 Uhr" value={teamForm.training} onChange={e=>setTeamForm({...teamForm,training:e.target.value})}/>
-              </div>
+              <div><label style={LBL}>Trainingszeiten</label><input className="input" placeholder="z.B. Di & Do 17:00 Uhr" value={teamForm.training} onChange={e=>setTeamForm({...teamForm,training:e.target.value})}/></div>
               <div style={{display:"flex",gap:10,marginTop:4}}>
                 <button className="btn btn-ghost" style={{flex:1}} onClick={()=>setShowTeamModal(false)}>Abbrechen</button>
                 <button className="btn btn-primary" style={{flex:2}} onClick={saveTeam} disabled={!teamForm.name}>{editingTeam?"✓ Speichern":"+ Erstellen"}</button>
@@ -1752,9 +1185,7 @@ export default function TVHindelangApp() {
         <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&setShowUserModal(false)}>
           <div className="modal" style={{maxWidth:460}}>
             <div style={{height:4,background:`linear-gradient(90deg,${B.amber},${B.teal})`,borderRadius:"4px 4px 0 0",margin:"-30px -30px 22px"}}/>
-            <h2 style={{fontSize:22,fontWeight:900,letterSpacing:1,textTransform:"uppercase",marginBottom:20}}>
-              {editingUser ? "Benutzer bearbeiten" : "Neuen Benutzer anlegen"}
-            </h2>
+            <h2 style={{fontSize:22,fontWeight:900,letterSpacing:1,textTransform:"uppercase",marginBottom:20}}>{editingUser ? "Benutzer bearbeiten" : "Neuen Benutzer anlegen"}</h2>
             <div style={{display:"flex",flexDirection:"column",gap:13}}>
               {!editingUser && (
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
@@ -1766,39 +1197,26 @@ export default function TVHindelangApp() {
                 <div><label style={LBL}>Anzeigename</label><input className="input" placeholder="z.B. Max Mustermann" value={userForm.name} onChange={e=>setUserForm({...userForm,name:e.target.value})}/></div>
                 <div><label style={LBL}>Rolle</label>
                   <select className="input" value={userForm.role} onChange={e=>setUserForm({...userForm,role:e.target.value})}>
-                    <option value="admin">Administrator</option>
-                    <option value="trainer">Trainer</option>
-                    <option value="player">Aktiv (Spieler:in)</option>
-                    <option value="parent">Eltern</option>
+                    <option value="admin">Administrator</option><option value="trainer">Trainer</option><option value="player">Aktiv (Spieler:in)</option><option value="parent">Eltern</option>
                   </select>
                 </div>
               </div>
-
-              {/* TEAM ZUWEISUNG */}
               <div style={{marginTop: 4}}>
                 <label style={LBL}>Zugeordnete Mannschaften (Für Gruppen-Chats)</label>
                 <div style={{display:"flex", flexWrap:"wrap", gap:8, marginTop: 6}}>
                   {uniqueTeams.filter(t => t !== "Alle Mannschaften").map(tName => (
                     <label key={tName} style={{display:"flex", alignItems:"center", gap:6, fontSize:13, background: userForm.assignedTeams.includes(tName) ? B.tealLight : B.offWhite, padding: "8px 12px", borderRadius: 8, border: `1.5px solid ${userForm.assignedTeams.includes(tName) ? B.teal : B.lightGrey}`, cursor:"pointer", transition:"all .2s"}}>
-                      <input type="checkbox" style={{width: 16, height: 16}} checked={userForm.assignedTeams.includes(tName)} 
-                        onChange={e => {
-                          if(e.target.checked) setUserForm({...userForm, assignedTeams: [...userForm.assignedTeams, tName]});
-                          else setUserForm({...userForm, assignedTeams: userForm.assignedTeams.filter(name => name !== tName)});
-                        }} 
-                      />
+                      <input type="checkbox" style={{width: 16, height: 16}} checked={userForm.assignedTeams.includes(tName)} onChange={e => { if(e.target.checked) setUserForm({...userForm, assignedTeams: [...userForm.assignedTeams, tName]}); else setUserForm({...userForm, assignedTeams: userForm.assignedTeams.filter(name => name !== tName)}); }} />
                       {tName}
                     </label>
                   ))}
                   {uniqueTeams.length === 0 && <div style={{fontSize:12, color:B.midGrey}}>Lege zuerst Teams an oder importiere Spiele.</div>}
                 </div>
               </div>
-
               {userError && <div style={{color:B.red,fontSize:13,fontFamily:"'Barlow',sans-serif",marginTop:4}}>❌ {userError}</div>}
               <div style={{display:"flex",gap:10,marginTop:12}}>
                 <button className="btn btn-ghost" style={{flex:1}} onClick={()=>setShowUserModal(false)} disabled={userSaving}>Abbrechen</button>
-                <button className="btn btn-primary" style={{flex:2}} onClick={saveUser} disabled={userSaving || (!editingUser && (!userForm.email || !userForm.password))}>
-                  {userSaving ? "Speichert..." : "✓ Speichern"}
-                </button>
+                <button className="btn btn-primary" style={{flex:2}} onClick={saveUser} disabled={userSaving || (!editingUser && (!userForm.email || !userForm.password))}>{userSaving ? "Speichert..." : "✓ Speichern"}</button>
               </div>
             </div>
           </div>
@@ -1813,29 +1231,12 @@ export default function TVHindelangApp() {
             <h2 style={{fontSize:22,fontWeight:900,letterSpacing:1,textTransform:"uppercase",marginBottom:18}}>Neuer Chat</h2>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:16}}>
               {[["group","👥 Gruppen-Chat"],["direct","👤 Direktnachricht"]].map(([type,label])=>(
-                <button key={type} onClick={()=>setNewThreadType(type)}
-                  style={{border:`2px solid ${newThreadType===type?B.teal:B.lightGrey}`,background:newThreadType===type?B.tealLight:B.white,color:newThreadType===type?B.teal:B.midGrey,borderRadius:8,padding:10,cursor:"pointer",fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:13,transition:"all .15s"}}>
-                  {label}
-                </button>
+                <button key={type} onClick={()=>setNewThreadType(type)} style={{border:`2px solid ${newThreadType===type?B.teal:B.lightGrey}`,background:newThreadType===type?B.tealLight:B.white,color:newThreadType===type?B.teal:B.midGrey,borderRadius:8,padding:10,cursor:"pointer",fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:13,transition:"all .15s"}}>{label}</button>
               ))}
             </div>
             {newThreadType==="group"
-              ? <div><label style={LBL}>Mannschaft</label>
-                  <select className="input" value={newThreadTeam} onChange={e=>setNewThreadTeam(e.target.value)}>
-                    {teams.map(t=>{
-                      if (!t) return null;
-                      return <option key={t.id} value={t.name}>{safeStr(t.name)}</option>
-                    })}
-                  </select>
-                </div>
-              : <div><label style={LBL}>Empfänger</label>
-                  <select className="input" value={newThreadRecipientId} onChange={e=>setNewThreadRecipientId(e.target.value)}>
-                    <option value="">Bitte wählen...</option>
-                    {allUsers.filter(u => u && u.id !== user?.uid).map(u => (
-                      <option key={u.id} value={u.id}>{safeStr(u.name || u.email)}</option>
-                    ))}
-                  </select>
-                </div>
+              ? <div><label style={LBL}>Mannschaft</label><select className="input" value={newThreadTeam} onChange={e=>setNewThreadTeam(e.target.value)}>{teams.map(t=>{ if (!t) return null; return <option key={t.id} value={t.name}>{safeStr(t.name)}</option> })}</select></div>
+              : <div><label style={LBL}>Empfänger</label><select className="input" value={newThreadRecipientId} onChange={e=>setNewThreadRecipientId(e.target.value)}><option value="">Bitte wählen...</option>{allUsers.filter(u => u && u.id !== user?.uid).map(u => ( <option key={u.id} value={u.id}>{safeStr(u.name || u.email)}</option> ))}</select></div>
             }
             <div style={{display:"flex",gap:10,marginTop:16}}>
               <button className="btn btn-ghost" style={{flex:1}} onClick={()=>setShowNewThread(false)}>Abbrechen</button>
