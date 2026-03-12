@@ -95,7 +95,7 @@ const isImageFile = (filename) => {
   return /\.(jpg|jpeg|png|gif|webp)$/i.test(filename);
 };
 
-// NEU: BILD-KOMPRIMIERUNG FÜR SCHNELLEN UPLOAD
+// BILD-KOMPRIMIERUNG FÜR SCHNELLEN UPLOAD
 const compressImage = (file, maxWidth = 1200, maxHeight = 1200, quality = 0.7) => {
   return new Promise((resolve) => {
     const reader = new FileReader();
@@ -121,15 +121,11 @@ const compressImage = (file, maxWidth = 1200, maxHeight = 1200, quality = 0.7) =
 
         canvas.toBlob((blob) => {
           if (blob) {
-            // Speichert als JPG mit reduzierter Qualität
             const newName = file.name.replace(/\.[^/.]+$/, ".jpg");
-            const compressedFile = new File([blob], newName, {
-              type: 'image/jpeg',
-              lastModified: Date.now()
-            });
+            const compressedFile = new File([blob], newName, { type: 'image/jpeg', lastModified: Date.now() });
             resolve(compressedFile);
           } else {
-            resolve(file); // Falls Fehler, Original nutzen
+            resolve(file); 
           }
         }, 'image/jpeg', quality);
       };
@@ -212,8 +208,8 @@ export default function TVHindelangApp() {
 
   // KUGELSICHERE FILTER-LISTE
   const uniqueTeams = Array.from(new Set([
-    ...teams.map(t => t?.name ? String(t.name) : "").filter(Boolean),
-    ...events.map(e => e?.team ? String(e.team) : "").filter(Boolean)
+    ...(teams || []).map(t => t?.name ? String(t.name) : "").filter(Boolean),
+    ...(events || []).map(e => e?.team ? String(e.team) : "").filter(Boolean)
   ])).sort((a,b) => a.localeCompare(b));
   
   const teamNames = ["Alle Mannschaften", ...uniqueTeams];
@@ -503,12 +499,9 @@ export default function TVHindelangApp() {
     if (newsForm.fileObj) {
       try {
         let fileToUpload = newsForm.fileObj;
-        
-        // BILDKOMPRIMIERUNG EINSCHALTEN
         if (isImageFile(fileToUpload.name)) {
           fileToUpload = await compressImage(fileToUpload);
         }
-
         const fileRef = ref(storage, `news/${Date.now()}_${fileToUpload.name}`);
         await uploadBytes(fileRef, fileToUpload);
         finalFileUrl = await getDownloadURL(fileRef); 
@@ -536,10 +529,10 @@ export default function TVHindelangApp() {
   const openAddTeam  = () => { setEditingTeam(null); setTeamForm(emptyTeamForm()); setShowTeamModal(true); };
   const openEditTeam = (t) => { 
     setEditingTeam(t); 
-    let loadedTrainers = Array.isArray(t.trainers) ? t.trainers : [];
-    if (loadedTrainers.length === 0 && t.trainer) { loadedTrainers = [{ name: t.trainer, phone: "" }]; } 
+    let loadedTrainers = Array.isArray(t?.trainers) ? t.trainers : [];
+    if (loadedTrainers.length === 0 && t?.trainer) { loadedTrainers = [{ name: t.trainer, phone: "" }]; } 
     else if (loadedTrainers.length === 0) { loadedTrainers = [{ name: "", phone: "" }]; }
-    setTeamForm({ name: t.name, trainers: loadedTrainers, training: t.training || "", jahrgang: t.jahrgang || "" }); 
+    setTeamForm({ name: t?.name || "", trainers: loadedTrainers, training: t?.training || "", jahrgang: t?.jahrgang || "" }); 
     setShowTeamModal(true); 
   };
   const saveTeam = async () => {
@@ -563,7 +556,7 @@ export default function TVHindelangApp() {
   const openEditUser = (u) => { 
     setEditingUser(u); 
     setUserError(""); 
-    setUserForm({ name: u.name || "", email: u.email || "", password: "", role: u.role || "player", assignedTeams: Array.isArray(u.assignedTeams) ? u.assignedTeams : [] }); 
+    setUserForm({ name: u?.name || "", email: u?.email || "", password: "", role: u?.role || "player", assignedTeams: Array.isArray(u?.assignedTeams) ? u.assignedTeams : [] }); 
     setShowUserModal(true); 
   };
   const saveUser = async () => {
@@ -594,7 +587,7 @@ export default function TVHindelangApp() {
 
   const openChat = async (th) => {
     setActiveThread(th);
-    if (user) {
+    if (user && th?.id) {
       await updateDoc(doc(db, "threads", th.id), { [`readReceipts.${user.uid}`]: Date.now() });
     }
   };
@@ -625,7 +618,7 @@ export default function TVHindelangApp() {
       const ref = await addDoc(collection(db,"threads"), { type:"group", label:newThreadTeam, team:newThreadTeam, messages:[] });
       setActiveThread({ id:ref.id, type:"group", label:newThreadTeam, team:newThreadTeam, messages:[] });
     } else {
-      const existing = threads.find(th => th.type === "direct" && Array.isArray(th.participants) && th.participants.includes(user.uid) && th.participants.includes(newThreadRecipientId));
+      const existing = threads.find(th => th?.type === "direct" && Array.isArray(th?.participants) && th.participants.includes(user.uid) && th.participants.includes(newThreadRecipientId));
       if (existing) {
         openChat(existing);
       } else {
@@ -641,7 +634,8 @@ export default function TVHindelangApp() {
     setNewThreadRecipientId("");
   };
 
-  const visibleThreads = threads.filter(th => {
+  const visibleThreads = (threads || []).filter(th => {
+    if (!th) return false;
     if (th.type === "group") {
       if (isAdmin) return true; 
       const myProfile = allUsers.find(u => u.id === user?.uid);
@@ -655,7 +649,7 @@ export default function TVHindelangApp() {
   });
 
   const checkUnread = (th) => {
-    if (!Array.isArray(th.messages) || th.messages.length === 0) return false;
+    if (!th || !Array.isArray(th.messages) || th.messages.length === 0) return false;
     const lastMsg = th.messages[th.messages.length - 1];
     const myProfile = allUsers.find(u => u.id === user?.uid);
     if (lastMsg.from === (myProfile?.name || user?.email)) return false; 
@@ -673,9 +667,9 @@ export default function TVHindelangApp() {
   
   const getDay = (day) => { const d=`${year}-${String(month+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`; return events.filter(e=>e.date===d&&matchesFilter(e)); };
   const selectedStr = selectedDay ? `${year}-${String(month+1).padStart(2,"0")}-${String(selectedDay).padStart(2,"0")}` : "";
-  const selectedEvs = selectedDay ? events.filter(e=>e.date===selectedStr&&matchesFilter(e)).sort((a,b)=>String(a.time||"").localeCompare(String(b.time||""))) : [];
-  const upcoming    = [...events].filter(e=>(e.date||"")>=todayStr&&matchesFilter(e)).sort((a,b)=>String(a.date||"").localeCompare(String(b.date||""))||String(a.time||"").localeCompare(String(b.time||""))).slice(0,10);
-  const nextThree   = [...events].filter(e=>(e.date||"")>=todayStr).sort((a,b)=>String(a.date||"").localeCompare(String(b.date||""))||String(a.time||"").localeCompare(String(b.time||""))).slice(0,3);
+  const selectedEvs = selectedDay ? (events||[]).filter(e=>e.date===selectedStr&&matchesFilter(e)).sort((a,b)=>String(a.time||"").localeCompare(String(b.time||""))) : [];
+  const upcoming    = [...(events||[])].filter(e=>(e.date||"")>=todayStr&&matchesFilter(e)).sort((a,b)=>String(a.date||"").localeCompare(String(b.date||""))||String(a.time||"").localeCompare(String(b.time||""))).slice(0,10);
+  const nextThree   = [...(events||[])].filter(e=>(e.date||"")>=todayStr).sort((a,b)=>String(a.date||"").localeCompare(String(b.date||""))||String(a.time||"").localeCompare(String(b.time||""))).slice(0,3);
 
   const NAV = [
     { id:"home",     icon:"🏠", label:"Start"        },
@@ -686,6 +680,7 @@ export default function TVHindelangApp() {
   ];
 
   const EventCard = ({ ev, controls=true }) => {
+    if (!ev) return null;
     const t=typeOf(ev.type); 
     const hasBus=ev.bus1||ev.bus2;
     const myProfile = allUsers.find(u => u.id === user?.uid);
@@ -738,6 +733,16 @@ export default function TVHindelangApp() {
         </div>
       </div>
     );
+  };
+
+  const getAdminTabs = () => {
+    const tabs = [];
+    if (isAdmin) tabs.push({ id: "teams", label: "👥 Mannschaften" });
+    if (canEditEvents) tabs.push({ id: "events", label: "📅 Termine" });
+    if (canEditNews) tabs.push({ id: "news", label: "📢 News" });
+    if (isAdmin) tabs.push({ id: "users", label: "👤 Benutzer" });
+    if (isAdmin) tabs.push({ id: "intro", label: "🏠 Startseite" });
+    return tabs;
   };
 
   if (authLoading) return (
@@ -976,6 +981,7 @@ export default function TVHindelangApp() {
                 {nextThree.length===0
                   ? <div style={{fontSize:13,color:B.midGrey,fontFamily:"'Barlow',sans-serif"}}>Keine kommenden Termine</div>
                   : nextThree.map(ev=>{
+                      if (!ev) return null;
                       const t=typeOf(ev.type); const sd=safeDateObj(ev.date); const hasBus=ev.bus1||ev.bus2;
                       return (
                         <div key={ev.id} style={{display:"flex",gap:12,alignItems:"center",padding:"9px 11px",background:B.offWhite,borderRadius:8,borderLeft:`3px solid ${hasBus?BUS.color:t.color}`}}>
@@ -997,7 +1003,8 @@ export default function TVHindelangApp() {
                   <span style={{fontSize:13,fontWeight:800,letterSpacing:1.5,textTransform:"uppercase",color:B.red}}>📋 Spielplan</span>
                   <span style={{fontSize:11,color:B.midGrey,fontWeight:600}}>Alle Spiele →</span>
                 </div>
-                {events.filter(e=>e.type==="game"&&(e.date||"")>=todayStr).sort((a,b)=>String(a.date||"").localeCompare(String(b.date||""))).slice(0,3).map(ev=>{
+                {events.filter(e=>e && e.type==="game"&&(e.date||"")>=todayStr).sort((a,b)=>String(a.date||"").localeCompare(String(b.date||""))).slice(0,3).map(ev=>{
+                  if (!ev) return null;
                   const sd=safeDateObj(ev.date);
                   return (
                     <div key={ev.id} style={{display:"flex",gap:10,alignItems:"center",padding:"9px 11px",background:B.redLight,borderRadius:8}}>
@@ -1019,7 +1026,10 @@ export default function TVHindelangApp() {
                   <span style={{fontSize:11,color:B.midGrey,fontWeight:600}}>Übersicht →</span>
                 </div>
                 <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
-                  {teams.map(t=><span key={t.id} style={{display:"inline-block",padding:"2px 9px",borderRadius:20,fontSize:11,fontWeight:700,background:B.tealLight,color:B.teal}}>{String(t.name || "")}</span>)}
+                  {teams.map(t=>{
+                    if (!t) return null;
+                    return <span key={t.id} style={{display:"inline-block",padding:"2px 9px",borderRadius:20,fontSize:11,fontWeight:700,background:B.tealLight,color:B.teal}}>{String(t.name || "")}</span>
+                  })}
                 </div>
                 <div style={{fontSize:13,color:B.midGrey,fontFamily:"'Barlow',sans-serif"}}>{teams.length} aktive Mannschaften</div>
               </div>
@@ -1028,12 +1038,13 @@ export default function TVHindelangApp() {
                   <span style={{fontSize:13,fontWeight:800,letterSpacing:1.5,textTransform:"uppercase",color:B.amber}}>📢 News</span>
                   {canEditNews&&<button className="btn btn-primary" style={{padding:"5px 12px",fontSize:11}} onClick={e=>{e.stopPropagation();openAddNews();}}>+ News</button>}
                 </div>
-                {news.slice(0,2).map(n=>(
+                {news.slice(0,2).map(n=>{
+                  if (!n) return null;
+                  return (
                   <div key={n.id} style={{padding:"10px 12px",background:B.amberLight,borderRadius:8,borderLeft:`3px solid ${B.amber}`}}>
                     <div style={{fontWeight:800,fontSize:14,marginBottom:3}}>{String(n.title || "")}</div>
                     <div style={{fontSize:12,color:B.charcoal,fontFamily:"'Barlow',sans-serif",lineHeight:1.5}}>{String(n.body || "").slice(0,90)}{(String(n.body||"").length)>90?"…":""}</div>
                     
-                    {/* BILD-VORSCHAU ODER TEXT-LINK */}
                     {n.fileUrl && isImageFile(n.fileName) ? (
                       <a href={n.fileUrl} target="_blank" rel="noopener noreferrer" style={{display:"block", marginTop:8}}>
                         <img src={n.fileUrl} alt="News Anhang" style={{width:"100%", maxHeight:160, objectFit:"cover", borderRadius:6, border:`1px solid ${B.lightGrey}`}} />
@@ -1046,7 +1057,7 @@ export default function TVHindelangApp() {
                     
                     <div style={{fontSize:10,color:B.midGrey,marginTop:6,fontWeight:600}}>{String(n.date || "")} · {String(n.author || "")}</div>
                   </div>
-                ))}
+                )})}
               </div>
             </div>
           </div>
@@ -1117,6 +1128,7 @@ export default function TVHindelangApp() {
               {upcoming.length===0
                 ? <div style={{textAlign:"center",color:B.midGrey,padding:48}}>Keine Termine für diese Auswahl</div>
                 : upcoming.map(ev=>{
+                    if (!ev) return null;
                     const t=typeOf(ev.type); const sd=safeDateObj(ev.date); const hasBus=ev.bus1||ev.bus2;
                     const myProfile = allUsers.find(u => u.id === user?.uid);
                     const myName = myProfile?.name || user?.email;
@@ -1167,7 +1179,9 @@ export default function TVHindelangApp() {
           <div style={{maxWidth:1040,margin:"0 auto"}}>
             <h1 style={{fontSize:30,fontWeight:900,letterSpacing:2,textTransform:"uppercase",marginBottom:22}}>Mannschaften <span style={{color:B.teal}}>({teams.length})</span></h1>
             <div className="grid-2" style={{gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))"}}>
-              {teams.map(ti=>(
+              {teams.map(ti=>{
+                if (!ti) return null;
+                return (
                 <div key={ti.id} className="team-card" onClick={()=>setSelectedTeam(ti)}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
                     <div style={{fontSize:22,fontWeight:900,letterSpacing:1}}>{String(ti.name || "")}</div>
@@ -1177,7 +1191,7 @@ export default function TVHindelangApp() {
                   <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif"}}>⏰ {String(ti.training || "")}</div>
                   <div style={{marginTop:12,fontSize:11,color:B.teal,fontWeight:700}}>Details →</div>
                 </div>
-              ))}
+              )})}
             </div>
           </div>
         )}
@@ -1226,8 +1240,8 @@ export default function TVHindelangApp() {
 
               <div style={{marginTop:20}}>
                 <div style={{fontSize:12,fontWeight:700,letterSpacing:1,color:B.midGrey,textTransform:"uppercase",marginBottom:10}}>Nächste Termine</div>
-                {events.filter(e=>e.team===selectedTeam.name&&(e.date||"")>=todayStr).sort((a,b)=>String(a.date||"").localeCompare(String(b.date||""))).slice(0,4).map(ev=><EventCard key={ev.id} ev={ev} controls={false}/>)}
-                {events.filter(e=>e.team===selectedTeam.name&&(e.date||"")>=todayStr).length===0&&<div style={{fontSize:13,color:B.midGrey,fontFamily:"'Barlow',sans-serif"}}>Keine kommenden Termine</div>}
+                {events.filter(e=>e && e.team===selectedTeam.name&&(e.date||"")>=todayStr).sort((a,b)=>String(a.date||"").localeCompare(String(b.date||""))).slice(0,4).map(ev=><EventCard key={ev.id} ev={ev} controls={false}/>)}
+                {events.filter(e=>e && e.team===selectedTeam.name&&(e.date||"")>=todayStr).length===0&&<div style={{fontSize:13,color:B.midGrey,fontFamily:"'Barlow',sans-serif"}}>Keine kommenden Termine</div>}
               </div>
             </div>
           </div>
@@ -1246,6 +1260,7 @@ export default function TVHindelangApp() {
                     <div style={{padding: 20, textAlign: "center", color: B.midGrey, fontSize: 13}}>Keine aktiven Chats.</div>
                   )}
                   {visibleThreads.map(th=>{
+                    if (!th) return null;
                     const last = Array.isArray(th.messages) && th.messages.length > 0 ? th.messages[th.messages.length - 1] : null;
                     const isActive=activeThread?.id===th.id;
                     const isUnread = checkUnread(th);
@@ -1298,6 +1313,7 @@ export default function TVHindelangApp() {
                     <div style={{flex:1,overflow:"auto",padding:20,display:"flex",flexDirection:"column",gap:10,background:B.offWhite}}>
                       {(!Array.isArray(activeThread.messages)||activeThread.messages.length===0)&&<div style={{textAlign:"center",color:B.midGrey,padding:"40px 0",fontSize:14}}>Noch keine Nachrichten</div>}
                       {Array.isArray(activeThread.messages) && activeThread.messages.map((msg,i)=>{
+                        if (!msg) return null;
                         const myProfile = allUsers.find(u => u.id === user.uid);
                         const isMe = msg.from === (myProfile?.name || user.email);
                         return (
@@ -1355,7 +1371,9 @@ export default function TVHindelangApp() {
                 </div>
                 <div style={{display:"flex",flexDirection:"column",gap:8}}>
                   {teams.length === 0 && <div style={{color:B.midGrey, fontSize:14}}>Keine Mannschaften gefunden. Leg eine neue an!</div>}
-                  {teams.map(t=>(
+                  {teams.map(t=>{
+                    if (!t) return null;
+                    return (
                     <div key={t.id} className="card admin-list-item">
                       <div style={{fontWeight:800,fontSize:16}}>{String(t.name || "Unbenannt")}</div>
                       <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif"}}>👤 {String(getTrainerNames(t))}</div>
@@ -1366,7 +1384,7 @@ export default function TVHindelangApp() {
                         <button className="btn btn-danger" onClick={()=>deleteTeam(t.id)}>🗑️</button>
                       </div>
                     </div>
-                  ))}
+                  )})}
                 </div>
               </div>
             )}
@@ -1386,7 +1404,8 @@ export default function TVHindelangApp() {
                   
                 </div>
                 <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                  {[...events].sort((a,b)=>String(a.date||"").localeCompare(String(b.date||""))).map(ev=>{
+                  {[...(events||[])].sort((a,b)=>String(a?.date||"").localeCompare(String(b?.date||""))).map(ev=>{
+                    if (!ev) return null;
                     const t=typeOf(ev.type); const sd = safeDateObj(ev.date);
                     return (
                       <div key={ev.id} className="card schedule-grid">
@@ -1422,7 +1441,9 @@ export default function TVHindelangApp() {
                   <button className="btn btn-primary" onClick={openAddNews}>+ News</button>
                 </div>
                 <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                  {news.map(n=>(
+                  {news.map(n=>{
+                    if (!n) return null;
+                    return (
                     <div key={n.id} className="card" style={{padding:"16px 20px",borderLeft:`3px solid ${B.amber}`}}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12}} className="event-card-inner">
                         <div style={{flex:1}}>
@@ -1448,7 +1469,7 @@ export default function TVHindelangApp() {
                         </div>
                       </div>
                     </div>
-                  ))}
+                  )})}
                 </div>
               </div>
             )}
@@ -1462,6 +1483,7 @@ export default function TVHindelangApp() {
                 </div>
                 <div style={{display:"flex",flexDirection:"column",gap:8}}>
                   {allUsers.map(u=>{
+                    if (!u) return null;
                     const getRoleLabel = (r) => {
                       if(r==="admin") return "Admin";
                       if(r==="trainer") return "Trainer";
@@ -1782,14 +1804,14 @@ export default function TVHindelangApp() {
             {newThreadType==="group"
               ? <div><label style={LBL}>Mannschaft</label>
                   <select className="input" value={newThreadTeam} onChange={e=>setNewThreadTeam(e.target.value)}>
-                    {teams.map(t=><option key={t.id} value={t.name}>{String(t.name||"")}</option>)}
+                    {teams.map(t=><option key={t.id} value={t.name}>{String(t?.name||"")}</option>)}
                   </select>
                 </div>
               : <div><label style={LBL}>Empfänger</label>
                   <select className="input" value={newThreadRecipientId} onChange={e=>setNewThreadRecipientId(e.target.value)}>
                     <option value="">Bitte wählen...</option>
-                    {allUsers.filter(u => u.id !== user?.uid).map(u => (
-                      <option key={u.id} value={u.id}>{String(u.name || u.email || "")}</option>
+                    {allUsers.filter(u => u?.id !== user?.uid).map(u => (
+                      <option key={u.id} value={u.id}>{String(u?.name || u?.email || "")}</option>
                     ))}
                   </select>
                 </div>
