@@ -229,6 +229,7 @@ export default function TVHindelangApp() {
 
   const handleLogout = async () => { await signOut(auth); setView("home"); };
 
+  // ── CSV IMPORT LOGIK ────────────────────────
   const handleCSVUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -440,6 +441,7 @@ export default function TVHindelangApp() {
 
   const openAddNews = () => { setEditingNews(null); setNewsForm({title:"", body:"", fileUrl:"", fileName:"", fileObj:null}); setShowNewsModal(true); };
   const openEditNews = (n) => { setEditingNews(n); setNewsForm({title:n.title, body:n.body, fileUrl:n.fileUrl||"", fileName:n.fileName||"", fileObj:null}); setShowNewsModal(true); };
+  
   const saveNews = async () => {
     if (!newsForm.title || !newsForm.body) return;
     setNewsSaving(true);
@@ -452,10 +454,14 @@ export default function TVHindelangApp() {
       } catch (err) { console.error("Upload Fehler:", err); }
     }
     const newsData = { title: newsForm.title, body: newsForm.body, fileUrl: finalFileUrl, fileName: finalFileName };
-    if (editingNews) await updateDoc(doc(db,"news",editingNews.id), newsData);
-    else await addDoc(collection(db,"news"), { ...newsData, date:todayStr, author: user?.email||"Admin", createdAt:serverTimestamp() });
+    if (editingNews) {
+      await updateDoc(doc(db,"news",editingNews.id), newsData);
+    } else {
+      await addDoc(collection(db,"news"), { ...newsData, date:todayStr, author: user?.email||"Admin", createdAt:serverTimestamp() });
+    }
     setNewsSaving(false); setShowNewsModal(false);
   };
+
   const deleteNews = async (id) => { 
     if (window.confirm("Möchtest du diese News wirklich löschen?")) { await deleteDoc(doc(db,"news",id)); }
   };
@@ -665,16 +671,6 @@ export default function TVHindelangApp() {
         </div>
       </div>
     );
-  };
-
-  const getAdminTabs = () => {
-    const tabs = [];
-    if (isAdmin) tabs.push({ id: "teams", label: "👥 Mannschaften" });
-    if (canEditEvents) tabs.push({ id: "events", label: "📅 Termine" });
-    if (canEditNews) tabs.push({ id: "news", label: "📢 News" });
-    if (isAdmin) tabs.push({ id: "users", label: "👤 Benutzer" });
-    if (isAdmin) tabs.push({ id: "intro", label: "🏠 Startseite" });
-    return tabs;
   };
 
   if (authLoading) return (
@@ -969,11 +965,18 @@ export default function TVHindelangApp() {
                   <div key={n.id} style={{padding:"10px 12px",background:B.amberLight,borderRadius:8,borderLeft:`3px solid ${B.amber}`}}>
                     <div style={{fontWeight:800,fontSize:14,marginBottom:3}}>{n.title}</div>
                     <div style={{fontSize:12,color:B.charcoal,fontFamily:"'Barlow',sans-serif",lineHeight:1.5}}>{n.body?.slice(0,90)}{(n.body?.length||0)>90?"…":""}</div>
-                    {n.fileUrl && (
+                    
+                    {/* BILD-VORSCHAU ODER TEXT-LINK */}
+                    {n.fileUrl && (n.fileName?.toLowerCase().match(/\.(jpg|jpeg|png|gif)$/i)) ? (
+                      <a href={n.fileUrl} target="_blank" rel="noopener noreferrer" style={{display:"block", marginTop:8}}>
+                        <img src={n.fileUrl} alt="News Anhang" style={{width:"100%", maxHeight:160, objectFit:"cover", borderRadius:6, border:`1px solid ${B.lightGrey}`}} />
+                      </a>
+                    ) : n.fileUrl ? (
                       <a href={n.fileUrl} target="_blank" rel="noopener noreferrer" style={{display:"inline-block", marginTop:6, fontSize:11, fontWeight:700, color:B.amber, textDecoration:"none", borderBottom:`1px solid ${B.amber}`}}>
                         📎 {n.fileName}
                       </a>
-                    )}
+                    ) : null}
+                    
                     <div style={{fontSize:10,color:B.midGrey,marginTop:6,fontWeight:600}}>{n.date} · {n.author}</div>
                   </div>
                 ))}
@@ -1358,11 +1361,17 @@ export default function TVHindelangApp() {
                         <div style={{flex:1}}>
                           <div style={{fontWeight:800,fontSize:16,marginBottom:4}}>{n.title}</div>
                           <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif",lineHeight:1.5,marginBottom:6}}>{n.body}</div>
-                          {n.fileUrl && (
+                          
+                          {n.fileUrl && (n.fileName?.toLowerCase().match(/\.(jpg|jpeg|png|gif)$/i)) ? (
+                            <a href={n.fileUrl} target="_blank" rel="noopener noreferrer" style={{display:"block", marginTop:8, marginBottom:6}}>
+                              <img src={n.fileUrl} alt="Anhang" style={{maxWidth:"100%", maxHeight:120, objectFit:"cover", borderRadius:6, border:`1px solid ${B.lightGrey}`}} />
+                            </a>
+                          ) : n.fileUrl ? (
                             <a href={n.fileUrl} target="_blank" rel="noopener noreferrer" style={{display:"inline-block", marginBottom:6, fontSize:12, fontWeight:700, color:B.amber, textDecoration:"none", borderBottom:`1px solid ${B.amber}`}}>
                               📎 {n.fileName}
                             </a>
-                          )}
+                          ) : null}
+
                           <div style={{fontSize:11,color:B.midGrey,fontWeight:600}}>{n.date} · {n.author}</div>
                         </div>
                         <div className="event-card-actions">
@@ -1531,7 +1540,7 @@ export default function TVHindelangApp() {
                 </div>
               </div>
               <div style={{display:"flex",gap:10,marginTop:4}}>
-                <button className="btn btn-ghost" style={{flex:1}} onClick={()=>setShowEventModal(false)}>Abbrechen</button>
+                <button className="btn btn-ghost" style={{flex:1}} onClick={()=>{setShowEventModal(false); setNewsSaving(false);}}>Abbrechen</button>
                 <button className="btn btn-primary" style={{flex:2}} onClick={saveEvent} disabled={!eventForm.title || !eventForm.date || (eventForm.isRecurring && !eventForm.recurringEndDate)}>
                   {editingEvent ? "✓ Speichern" : (eventForm.isRecurring ? "🔄 Serie erstellen" : "+ Erstellen")}
                 </button>
@@ -1555,8 +1564,8 @@ export default function TVHindelangApp() {
                 <textarea className="input" style={{minHeight:100}} value={newsForm.body} onChange={e=>setNewsForm({...newsForm,body:e.target.value})}/>
               </div>
               
-              <div><label style={LBL}>Dateianhang (PDF, DOCX)</label>
-                <input className="input" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx" 
+              <div><label style={LBL}>Dateianhang (Bilder, PDF, DOCX)</label>
+                <input className="input" type="file" accept="image/jpeg,image/png,image/gif,.pdf,.doc,.docx,.xls,.xlsx" 
                   onChange={e=>setNewsForm({...newsForm, fileObj: e.target.files[0]})} />
                 {newsForm.fileName && !newsForm.fileObj && (
                   <div style={{fontSize:12, color:B.charcoal, marginTop:6}}>
@@ -1571,7 +1580,7 @@ export default function TVHindelangApp() {
               </div>
 
               <div style={{display:"flex",gap:10,marginTop:8}}>
-                <button className="btn btn-ghost" style={{flex:1}} onClick={()=>setShowNewsModal(false)} disabled={newsSaving}>Abbrechen</button>
+                <button className="btn btn-ghost" style={{flex:1}} onClick={()=>{setShowNewsModal(false); setNewsSaving(false);}}>Abbrechen</button>
                 <button className="btn btn-primary" style={{flex:2}} onClick={saveNews} disabled={!newsForm.title||!newsForm.body||newsSaving}>
                   {newsSaving ? "Wird hochgeladen..." : (editingNews ? "✓ Speichern" : "📢 Veröffentlichen")}
                 </button>
