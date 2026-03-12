@@ -95,6 +95,50 @@ const isImageFile = (filename) => {
   return /\.(jpg|jpeg|png|gif|webp)$/i.test(filename);
 };
 
+// NEU: BILD-KOMPRIMIERUNG FÜR SCHNELLEN UPLOAD
+const compressImage = (file, maxWidth = 1200, maxHeight = 1200, quality = 0.7) => {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target.result;
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxWidth || height > maxHeight) {
+          const ratio = Math.min(maxWidth / width, maxHeight / height);
+          width = width * ratio;
+          height = height * ratio;
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+
+        canvas.toBlob((blob) => {
+          if (blob) {
+            // Speichert als JPG mit reduzierter Qualität
+            const newName = file.name.replace(/\.[^/.]+$/, ".jpg");
+            const compressedFile = new File([blob], newName, {
+              type: 'image/jpeg',
+              lastModified: Date.now()
+            });
+            resolve(compressedFile);
+          } else {
+            resolve(file); // Falls Fehler, Original nutzen
+          }
+        }, 'image/jpeg', quality);
+      };
+      img.onerror = () => resolve(file);
+    };
+    reader.onerror = () => resolve(file);
+  });
+};
+
 // ─── MAIN ────────────────────────────────────────────────────
 export default function TVHindelangApp() {
   const [user, setUser]           = useState(null);  
@@ -455,20 +499,34 @@ export default function TVHindelangApp() {
     if (!newsForm.title || !newsForm.body) return;
     setNewsSaving(true);
     let finalFileUrl = newsForm.fileUrl; let finalFileName = newsForm.fileName;
+    
     if (newsForm.fileObj) {
       try {
-        const fileRef = ref(storage, `news/${Date.now()}_${newsForm.fileObj.name}`);
-        await uploadBytes(fileRef, newsForm.fileObj);
-        finalFileUrl = await getDownloadURL(fileRef); finalFileName = newsForm.fileObj.name;
-      } catch (err) { console.error("Upload Fehler:", err); }
+        let fileToUpload = newsForm.fileObj;
+        
+        // BILDKOMPRIMIERUNG EINSCHALTEN
+        if (isImageFile(fileToUpload.name)) {
+          fileToUpload = await compressImage(fileToUpload);
+        }
+
+        const fileRef = ref(storage, `news/${Date.now()}_${fileToUpload.name}`);
+        await uploadBytes(fileRef, fileToUpload);
+        finalFileUrl = await getDownloadURL(fileRef); 
+        finalFileName = fileToUpload.name;
+      } catch (err) { 
+        console.error("Upload Fehler:", err); 
+        alert("Fehler beim Hochladen der Datei.");
+      }
     }
+
     const newsData = { title: newsForm.title, body: newsForm.body, fileUrl: finalFileUrl, fileName: finalFileName };
     if (editingNews) {
       await updateDoc(doc(db,"news",editingNews.id), newsData);
     } else {
       await addDoc(collection(db,"news"), { ...newsData, date:todayStr, author: user?.email||"Admin", createdAt:serverTimestamp() });
     }
-    setNewsSaving(false); setShowNewsModal(false);
+    setNewsSaving(false); 
+    setShowNewsModal(false);
   };
 
   const deleteNews = async (id) => { 
@@ -680,16 +738,6 @@ export default function TVHindelangApp() {
         </div>
       </div>
     );
-  };
-
-  const getAdminTabs = () => {
-    const tabs = [];
-    if (isAdmin) tabs.push({ id: "teams", label: "👥 Mannschaften" });
-    if (canEditEvents) tabs.push({ id: "events", label: "📅 Termine" });
-    if (canEditNews) tabs.push({ id: "news", label: "📢 News" });
-    if (isAdmin) tabs.push({ id: "users", label: "👤 Benutzer" });
-    if (isAdmin) tabs.push({ id: "intro", label: "🏠 Startseite" });
-    return tabs;
   };
 
   if (authLoading) return (
@@ -985,6 +1033,7 @@ export default function TVHindelangApp() {
                     <div style={{fontWeight:800,fontSize:14,marginBottom:3}}>{String(n.title || "")}</div>
                     <div style={{fontSize:12,color:B.charcoal,fontFamily:"'Barlow',sans-serif",lineHeight:1.5}}>{String(n.body || "").slice(0,90)}{(String(n.body||"").length)>90?"…":""}</div>
                     
+                    {/* BILD-VORSCHAU ODER TEXT-LINK */}
                     {n.fileUrl && isImageFile(n.fileName) ? (
                       <a href={n.fileUrl} target="_blank" rel="noopener noreferrer" style={{display:"block", marginTop:8}}>
                         <img src={n.fileUrl} alt="News Anhang" style={{width:"100%", maxHeight:160, objectFit:"cover", borderRadius:6, border:`1px solid ${B.lightGrey}`}} />
@@ -1733,14 +1782,14 @@ export default function TVHindelangApp() {
             {newThreadType==="group"
               ? <div><label style={LBL}>Mannschaft</label>
                   <select className="input" value={newThreadTeam} onChange={e=>setNewThreadTeam(e.target.value)}>
-                    {teams.map(t=><option key={t.id} value={t.name}>{t.name}</option>)}
+                    {teams.map(t=><option key={t.id} value={t.name}>{String(t.name||"")}</option>)}
                   </select>
                 </div>
               : <div><label style={LBL}>Empfänger</label>
                   <select className="input" value={newThreadRecipientId} onChange={e=>setNewThreadRecipientId(e.target.value)}>
                     <option value="">Bitte wählen...</option>
                     {allUsers.filter(u => u.id !== user?.uid).map(u => (
-                      <option key={u.id} value={u.id}>{u.name || u.email}</option>
+                      <option key={u.id} value={u.id}>{String(u.name || u.email || "")}</option>
                     ))}
                   </select>
                 </div>
