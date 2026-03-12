@@ -72,7 +72,7 @@ const Chip = ({ bg, c, border, children }) => (
 );
 
 const getTrainerNames = (team) => {
-  if (team.trainers && team.trainers.length > 0) {
+  if (team.trainers && Array.isArray(team.trainers) && team.trainers.length > 0) {
     return team.trainers.map(tr => tr.name).filter(Boolean).join(", ") || "N.N.";
   }
   return team.trainer || "N.N.";
@@ -229,7 +229,6 @@ export default function TVHindelangApp() {
 
   const handleLogout = async () => { await signOut(auth); setView("home"); };
 
-  // ── CSV IMPORT LOGIK ────────────────────────
   const handleCSVUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -392,7 +391,7 @@ export default function TVHindelangApp() {
     if (!user) return;
     const myProfile = allUsers.find(u => u.id === user.uid);
     const myName = myProfile?.name || user.email; 
-    let newDeclines = ev.declines || [];
+    let newDeclines = Array.isArray(ev.declines) ? [...ev.declines] : [];
     if (newDeclines.includes(myName)) { newDeclines = newDeclines.filter(n => n !== myName); } 
     else { newDeclines.push(myName); }
     await updateDoc(doc(db, "events", ev.id), { declines: newDeclines });
@@ -464,7 +463,7 @@ export default function TVHindelangApp() {
   const openAddTeam  = () => { setEditingTeam(null); setTeamForm(emptyTeamForm()); setShowTeamModal(true); };
   const openEditTeam = (t) => { 
     setEditingTeam(t); 
-    let loadedTrainers = t.trainers || [];
+    let loadedTrainers = Array.isArray(t.trainers) ? t.trainers : [];
     if (loadedTrainers.length === 0 && t.trainer) { loadedTrainers = [{ name: t.trainer, phone: "" }]; } 
     else if (loadedTrainers.length === 0) { loadedTrainers = [{ name: "", phone: "" }]; }
     setTeamForm({ name: t.name, trainers: loadedTrainers, training: t.training || "", jahrgang: t.jahrgang || "" }); 
@@ -491,7 +490,7 @@ export default function TVHindelangApp() {
   const openEditUser = (u) => { 
     setEditingUser(u); 
     setUserError(""); 
-    setUserForm({ name: u.name || "", email: u.email || "", password: "", role: u.role || "player", assignedTeams: u.assignedTeams || [] }); 
+    setUserForm({ name: u.name || "", email: u.email || "", password: "", role: u.role || "player", assignedTeams: Array.isArray(u.assignedTeams) ? u.assignedTeams : [] }); 
     setShowUserModal(true); 
   };
   const saveUser = async () => {
@@ -553,7 +552,7 @@ export default function TVHindelangApp() {
       const ref = await addDoc(collection(db,"threads"), { type:"group", label:newThreadTeam, team:newThreadTeam, messages:[] });
       setActiveThread({ id:ref.id, type:"group", label:newThreadTeam, team:newThreadTeam, messages:[] });
     } else {
-      const existing = threads.find(th => th.type === "direct" && th.participants?.includes(user.uid) && th.participants?.includes(newThreadRecipientId));
+      const existing = threads.find(th => th.type === "direct" && Array.isArray(th.participants) && th.participants.includes(user.uid) && th.participants.includes(newThreadRecipientId));
       if (existing) {
         openChat(existing);
       } else {
@@ -573,15 +572,17 @@ export default function TVHindelangApp() {
     if (th.type === "group") {
       if (isAdmin) return true; 
       const myProfile = allUsers.find(u => u.id === user?.uid);
-      const myTeams = myProfile?.assignedTeams || [];
+      const myTeams = Array.isArray(myProfile?.assignedTeams) ? myProfile.assignedTeams : [];
       return myTeams.includes(th.team); 
     }
-    if (th.type === "direct") return th.participants?.includes(user?.uid);
+    if (th.type === "direct") {
+      return Array.isArray(th.participants) ? th.participants.includes(user?.uid) : false;
+    }
     return false;
   });
 
   const checkUnread = (th) => {
-    if (!th.messages || th.messages.length === 0) return false;
+    if (!Array.isArray(th.messages) || th.messages.length === 0) return false;
     const lastMsg = th.messages[th.messages.length - 1];
     const myProfile = allUsers.find(u => u.id === user?.uid);
     if (lastMsg.from === (myProfile?.name || user?.email)) return false; 
@@ -616,11 +617,10 @@ export default function TVHindelangApp() {
     const hasBus=ev.bus1||ev.bus2;
     const myProfile = allUsers.find(u => u.id === user?.uid);
     const myName = myProfile?.name || user?.email;
-    const hasDeclined = (ev.declines || []).includes(myName);
+    const hasDeclined = Array.isArray(ev.declines) && ev.declines.includes(myName);
     const isNew = ev.createdAt?.toDate ? ev.createdAt.toDate() > new Date(Date.now() - 48 * 60 * 60 * 1000) : false;
 
-    // NEU: Prüfen, ob der Nutzer bei diesem Event überhaupt absagen darf
-    const myTeams = myProfile?.assignedTeams || [];
+    const myTeams = Array.isArray(myProfile?.assignedTeams) ? myProfile.assignedTeams : [];
     const canDecline = isAdmin || isTrainer || myTeams.includes(ev.team);
 
     return (
@@ -639,8 +639,7 @@ export default function TVHindelangApp() {
             {ev.location&&<div style={{fontSize:12,color:B.midGrey,marginTop:1}}>📍 {ev.location}</div>}
             {ev.notes&&<div style={{fontSize:12,color:B.charcoal,marginTop:4,fontStyle:"italic",fontFamily:"'Barlow',sans-serif"}}>{ev.notes}</div>}
             
-            {/* DIE TRAINER-ÜBERSICHT (Nur für Admins/Trainer sichtbar) */}
-            {canEditEvents && ev.declines && ev.declines.length > 0 && (
+            {canEditEvents && Array.isArray(ev.declines) && ev.declines.length > 0 && (
               <div style={{marginTop: 8, padding: "6px 8px", background: B.redLight, borderRadius: 6, fontSize: 12, color: B.red, fontFamily:"'Barlow',sans-serif"}}>
                 <strong>❌ {ev.declines.length} Absage(n):</strong> {ev.declines.join(", ")}
               </div>
@@ -649,14 +648,12 @@ export default function TVHindelangApp() {
           
           <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0, alignItems:"flex-end"}} className="event-card-actions">
             
-            {/* ABSAGE BUTTON (Nur sichtbar, wenn man im Team ist oder Admin/Trainer ist) */}
             {canDecline && (
               <button className="btn btn-ghost" style={{padding:"5px 10px", fontSize:11, color: hasDeclined ? B.charcoal : B.red, background: hasDeclined ? B.lightGrey : B.redLight}} onClick={(e)=>{e.stopPropagation(); toggleDecline(ev);}}>
                 {hasDeclined ? "✅ Doch dabei" : "❌ Ich fehle"}
               </button>
             )}
 
-            {/* ADMIN BUTTONS */}
             {canEditEvents&&controls&&(
               <div style={{display:"flex", gap:4, marginTop: 4}} className="event-card-admin-actions">
                 <button className="btn btn-edit" style={{background:"#25D366", color:"white"}} onClick={(e)=>{e.stopPropagation(); shareEventWhatsApp(ev);}} title="In WhatsApp teilen">📲 WA</button>
@@ -668,6 +665,16 @@ export default function TVHindelangApp() {
         </div>
       </div>
     );
+  };
+
+  const getAdminTabs = () => {
+    const tabs = [];
+    if (isAdmin) tabs.push({ id: "teams", label: "👥 Mannschaften" });
+    if (canEditEvents) tabs.push({ id: "events", label: "📅 Termine" });
+    if (canEditNews) tabs.push({ id: "news", label: "📢 News" });
+    if (isAdmin) tabs.push({ id: "users", label: "👤 Benutzer" });
+    if (isAdmin) tabs.push({ id: "intro", label: "🏠 Startseite" });
+    return tabs;
   };
 
   if (authLoading) return (
@@ -1043,7 +1050,7 @@ export default function TVHindelangApp() {
                     const t=typeOf(ev.type); const sd=safeDateObj(ev.date); const hasBus=ev.bus1||ev.bus2;
                     const myProfile = allUsers.find(u => u.id === user?.uid);
                     const myName = myProfile?.name || user?.email;
-                    const hasDeclined = (ev.declines || []).includes(myName);
+                    const hasDeclined = Array.isArray(ev.declines) && ev.declines.includes(myName);
 
                     return (
                       <div key={ev.id} className="card schedule-grid"
@@ -1065,7 +1072,7 @@ export default function TVHindelangApp() {
                           <div style={{color:B.midGrey,fontSize:12}}>⏰ {ev.time} {ev.endTime ? `- ${ev.endTime}` : ""} Uhr · 📍 {ev.location}</div>
                           {ev.notes&&<div style={{fontSize:12,color:B.charcoal,marginTop:2,fontStyle:"italic",fontFamily:"'Barlow',sans-serif"}}>{ev.notes}</div>}
                           
-                          {canEditEvents && ev.declines && ev.declines.length > 0 && (
+                          {canEditEvents && Array.isArray(ev.declines) && ev.declines.length > 0 && (
                             <div style={{marginTop: 6, fontSize: 12, color: B.red, fontFamily:"'Barlow',sans-serif"}}>
                               <strong>❌ {ev.declines.length} Absage(n):</strong> {ev.declines.join(", ")}
                             </div>
@@ -1120,7 +1127,7 @@ export default function TVHindelangApp() {
                 <div style={{width:36,height:36,borderRadius:"50%",background:B.tealLight,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>👤</div>
                 <div>
                   <div style={{fontSize:11,fontWeight:700,letterSpacing:1,color:B.midGrey,textTransform:"uppercase",marginBottom:4}}>Trainer</div>
-                  {selectedTeam.trainers && selectedTeam.trainers.length > 0 ? (
+                  {selectedTeam.trainers && Array.isArray(selectedTeam.trainers) && selectedTeam.trainers.length > 0 ? (
                     selectedTeam.trainers.map((tr, idx) => (
                       <div key={idx} style={{marginBottom: idx === selectedTeam.trainers.length - 1 ? 0 : 10}}>
                         <div style={{fontSize:15,fontWeight:700,fontFamily:"'Barlow',sans-serif"}}>{tr.name || "N.N."}</div>
@@ -1175,7 +1182,7 @@ export default function TVHindelangApp() {
                     
                     let displayLabel = th.label;
                     if (th.type === "direct") {
-                       const otherId = th.participants?.find(id => id !== user.uid) || user.uid;
+                       const otherId = Array.isArray(th.participants) ? (th.participants.find(id => id !== user.uid) || user.uid) : user.uid;
                        const otherUser = allUsers.find(u => u.id === otherId);
                        displayLabel = otherUser ? (otherUser.name || otherUser.email) : "Benutzer";
                     }
@@ -1212,15 +1219,15 @@ export default function TVHindelangApp() {
                       <div>
                         <div style={{fontWeight:800,fontSize:15}}>
                           {activeThread.type === "direct" 
-                            ? (allUsers.find(u => u.id === (activeThread.participants?.find(id => id !== user.uid) || user.uid))?.name || "Benutzer")
+                            ? (allUsers.find(u => u.id === (Array.isArray(activeThread.participants) ? activeThread.participants.find(id => id !== user.uid) : user.uid))?.name || "Benutzer")
                             : activeThread.label}
                         </div>
                         <div style={{fontSize:11,color:B.midGrey}}>{activeThread.type==="group"?`Gruppen-Chat · ${activeThread.team}`:"Direktnachricht"}</div>
                       </div>
                     </div>
                     <div style={{flex:1,overflow:"auto",padding:20,display:"flex",flexDirection:"column",gap:10,background:B.offWhite}}>
-                      {(!activeThread.messages||activeThread.messages.length===0)&&<div style={{textAlign:"center",color:B.midGrey,padding:"40px 0",fontSize:14}}>Noch keine Nachrichten</div>}
-                      {activeThread.messages?.map((msg,i)=>{
+                      {(!Array.isArray(activeThread.messages)||activeThread.messages.length===0)&&<div style={{textAlign:"center",color:B.midGrey,padding:"40px 0",fontSize:14}}>Noch keine Nachrichten</div>}
+                      {Array.isArray(activeThread.messages) && activeThread.messages.map((msg,i)=>{
                         const myProfile = allUsers.find(u => u.id === user.uid);
                         const isMe = msg.from === (myProfile?.name || user.email);
                         return (
@@ -1397,7 +1404,7 @@ export default function TVHindelangApp() {
                       <div key={u.id} className="card admin-list-item" style={{gridTemplateColumns:"1fr 1fr auto auto"}}>
                         <div style={{fontWeight:800,fontSize:16}}>
                           {u.name || <span style={{color:B.midGrey,fontStyle:"italic"}}>Kein Name</span>}
-                          {u.assignedTeams?.length > 0 && <div style={{fontSize:11, color:B.midGrey, marginTop:2}}>Zugeordnet: {u.assignedTeams.join(", ")}</div>}
+                          {Array.isArray(u.assignedTeams) && u.assignedTeams.length > 0 && <div style={{fontSize:11, color:B.midGrey, marginTop:2}}>Zugeordnet: {u.assignedTeams.join(", ")}</div>}
                         </div>
                         <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif", overflow:"hidden", textOverflow:"ellipsis"}}>✉️ {u.email || u.id}</div>
                         <div>
