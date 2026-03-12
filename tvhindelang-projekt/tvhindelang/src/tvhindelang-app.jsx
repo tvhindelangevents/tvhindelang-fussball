@@ -71,11 +71,12 @@ const Chip = ({ bg, c, border, children }) => (
   <span style={{display:"inline-block",padding:"2px 9px",borderRadius:20,fontSize:11,fontWeight:700,letterSpacing:.8,textTransform:"uppercase",background:bg,color:c,border:border||"none"}}>{children}</span>
 );
 
+// SICHERHEITS-HELFER (Verhindern Abstürze bei fehlenden Daten)
 const getTrainerNames = (team) => {
-  if (team.trainers && Array.isArray(team.trainers) && team.trainers.length > 0) {
-    return team.trainers.map(tr => tr.name).filter(Boolean).join(", ") || "N.N.";
+  if (team?.trainers && Array.isArray(team.trainers) && team.trainers.length > 0) {
+    return team.trainers.map(tr => tr?.name).filter(Boolean).join(", ") || "N.N.";
   }
-  return team.trainer || "N.N.";
+  return team?.trainer || "N.N.";
 };
 
 const safeDateObj = (dateString) => {
@@ -87,6 +88,11 @@ const safeDateObj = (dateString) => {
     month: MONTHS[d.getMonth()] ? MONTHS[d.getMonth()].slice(0,3).toUpperCase() : "???",
     year: d.getFullYear()
   };
+};
+
+const isImageFile = (filename) => {
+  if (!filename || typeof filename !== 'string') return false;
+  return /\.(jpg|jpeg|png|gif|webp)$/i.test(filename);
 };
 
 // ─── MAIN ────────────────────────────────────────────────────
@@ -160,9 +166,10 @@ export default function TVHindelangApp() {
   const daysInMonth = new Date(year,month+1,0).getDate();
   const todayStr = new Date().toISOString().slice(0,10);
 
+  // DYNAMISCHE FILTER-LISTE
   const uniqueTeams = Array.from(new Set([
-    ...teams.map(t => t.name),
-    ...events.map(e => e.team).filter(Boolean)
+    ...teams.map(t => t?.name).filter(Boolean),
+    ...events.map(e => e?.team).filter(Boolean)
   ])).sort();
   const teamNames = ["Alle Mannschaften", ...uniqueTeams];
 
@@ -264,10 +271,10 @@ export default function TVHindelangApp() {
           else { current += char; }
         }
         result.push(current.trim());
-        return result.map(v => v.replace(/^"|"$/g, '').trim()); 
+        return result.map(v => String(v).replace(/^"|"$/g, '').trim()); 
       };
 
-      const headers = parseRow(lines[0]).map(h => h.toLowerCase());
+      const headers = parseRow(lines[0]).map(h => String(h).toLowerCase());
       let count = 0;
       
       for (let i = 1; i < lines.length; i++) {
@@ -292,7 +299,7 @@ export default function TVHindelangApp() {
 
         if (!rawDate || !heim || !gast) continue; 
 
-        let cleanDate = rawDate.replace(/^[a-zA-ZäöüßÄÖÜ]{2}\.?\s*/, ''); 
+        let cleanDate = String(rawDate).replace(/^[a-zA-ZäöüßÄÖÜ]{2}\.?\s*/, ''); 
         let formattedDate = "";
         const deMatch = cleanDate.match(/(\d{1,2})\.(\d{1,2})\.?(\d{2,4})?/); 
         const isoMatch = cleanDate.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);      
@@ -309,7 +316,7 @@ export default function TVHindelangApp() {
 
         let formattedTime = "12:00"; 
         if (rawTime) {
-            let tClean = rawTime.replace(".", ":").trim();
+            let tClean = String(rawTime).replace(".", ":").trim();
             const tMatch = tClean.match(/(\d{1,2}):(\d{2})/);
             if (tMatch) formattedTime = `${tMatch[1].padStart(2, '0')}:${tMatch[2]}`;
         }
@@ -318,18 +325,19 @@ export default function TVHindelangApp() {
         if (!fullLocation) fullLocation = "Ort unbekannt";
 
         let title = `${heim} vs. ${gast}`;
-        let teamNameRaw = mannschaftsart || "Verein"; 
+        let teamNameRaw = String(mannschaftsart || "Verein"); 
         
-        if (heim.toLowerCase().includes("hindelang") || heim.toLowerCase().includes("tvh") || heim.toLowerCase().includes("tv ")) {
+        if (String(heim).toLowerCase().includes("hindelang") || String(heim).toLowerCase().includes("tvh") || String(heim).toLowerCase().includes("tv ")) {
           title = `Heimspiel vs. ${gast}`;
-        } else if (gast.toLowerCase().includes("hindelang") || gast.toLowerCase().includes("tvh") || gast.toLowerCase().includes("tv ")) {
+        } else if (String(gast).toLowerCase().includes("hindelang") || String(gast).toLowerCase().includes("tvh") || String(gast).toLowerCase().includes("tv ")) {
           title = `Auswärts bei ${heim}`;
         }
 
         let finalTeamName = teamNameRaw;
         let matchedTeam = teams.find(t => {
-          const eName = t.name.toLowerCase().trim();
+          const eName = String(t?.name || "").toLowerCase().trim();
           const iName = teamNameRaw.toLowerCase().trim();
+          if (!eName) return false;
           return eName === iName ||
                  eName.replace("jugend", "junioren") === iName ||
                  eName.replace("junioren", "jugend") === iName ||
@@ -626,6 +634,7 @@ export default function TVHindelangApp() {
     const hasDeclined = Array.isArray(ev.declines) && ev.declines.includes(myName);
     const isNew = ev.createdAt?.toDate ? ev.createdAt.toDate() > new Date(Date.now() - 48 * 60 * 60 * 1000) : false;
 
+    // NEU: Prüfen, ob der Nutzer bei diesem Event überhaupt absagen darf
     const myTeams = Array.isArray(myProfile?.assignedTeams) ? myProfile.assignedTeams : [];
     const canDecline = isAdmin || isTrainer || myTeams.includes(ev.team);
 
@@ -645,6 +654,7 @@ export default function TVHindelangApp() {
             {ev.location&&<div style={{fontSize:12,color:B.midGrey,marginTop:1}}>📍 {ev.location}</div>}
             {ev.notes&&<div style={{fontSize:12,color:B.charcoal,marginTop:4,fontStyle:"italic",fontFamily:"'Barlow',sans-serif"}}>{ev.notes}</div>}
             
+            {/* DIE TRAINER-ÜBERSICHT (Nur für Admins/Trainer sichtbar) */}
             {canEditEvents && Array.isArray(ev.declines) && ev.declines.length > 0 && (
               <div style={{marginTop: 8, padding: "6px 8px", background: B.redLight, borderRadius: 6, fontSize: 12, color: B.red, fontFamily:"'Barlow',sans-serif"}}>
                 <strong>❌ {ev.declines.length} Absage(n):</strong> {ev.declines.join(", ")}
@@ -654,12 +664,14 @@ export default function TVHindelangApp() {
           
           <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0, alignItems:"flex-end"}} className="event-card-actions">
             
+            {/* ABSAGE BUTTON (Nur sichtbar, wenn man im Team ist oder Admin/Trainer ist) */}
             {canDecline && (
               <button className="btn btn-ghost" style={{padding:"5px 10px", fontSize:11, color: hasDeclined ? B.charcoal : B.red, background: hasDeclined ? B.lightGrey : B.redLight}} onClick={(e)=>{e.stopPropagation(); toggleDecline(ev);}}>
                 {hasDeclined ? "✅ Doch dabei" : "❌ Ich fehle"}
               </button>
             )}
 
+            {/* ADMIN BUTTONS */}
             {canEditEvents&&controls&&(
               <div style={{display:"flex", gap:4, marginTop: 4}} className="event-card-admin-actions">
                 <button className="btn btn-edit" style={{background:"#25D366", color:"white"}} onClick={(e)=>{e.stopPropagation(); shareEventWhatsApp(ev);}} title="In WhatsApp teilen">📲 WA</button>
@@ -967,13 +979,13 @@ export default function TVHindelangApp() {
                     <div style={{fontSize:12,color:B.charcoal,fontFamily:"'Barlow',sans-serif",lineHeight:1.5}}>{n.body?.slice(0,90)}{(n.body?.length||0)>90?"…":""}</div>
                     
                     {/* BILD-VORSCHAU ODER TEXT-LINK */}
-                    {n.fileUrl && (n.fileName?.toLowerCase().match(/\.(jpg|jpeg|png|gif)$/i)) ? (
+                    {n.fileUrl && isImageFile(n.fileName) ? (
                       <a href={n.fileUrl} target="_blank" rel="noopener noreferrer" style={{display:"block", marginTop:8}}>
                         <img src={n.fileUrl} alt="News Anhang" style={{width:"100%", maxHeight:160, objectFit:"cover", borderRadius:6, border:`1px solid ${B.lightGrey}`}} />
                       </a>
                     ) : n.fileUrl ? (
                       <a href={n.fileUrl} target="_blank" rel="noopener noreferrer" style={{display:"inline-block", marginTop:6, fontSize:11, fontWeight:700, color:B.amber, textDecoration:"none", borderBottom:`1px solid ${B.amber}`}}>
-                        📎 {n.fileName}
+                        📎 {n.fileName || "Anhang öffnen"}
                       </a>
                     ) : null}
                     
@@ -1133,8 +1145,8 @@ export default function TVHindelangApp() {
                   {selectedTeam.trainers && Array.isArray(selectedTeam.trainers) && selectedTeam.trainers.length > 0 ? (
                     selectedTeam.trainers.map((tr, idx) => (
                       <div key={idx} style={{marginBottom: idx === selectedTeam.trainers.length - 1 ? 0 : 10}}>
-                        <div style={{fontSize:15,fontWeight:700,fontFamily:"'Barlow',sans-serif"}}>{tr.name || "N.N."}</div>
-                        {tr.phone && (
+                        <div style={{fontSize:15,fontWeight:700,fontFamily:"'Barlow',sans-serif"}}>{tr?.name || "N.N."}</div>
+                        {tr?.phone && (
                           <div style={{fontSize:13,fontFamily:"'Barlow',sans-serif",marginTop:2}}>
                             📞 <a href={`tel:${tr.phone}`} style={{color:B.teal,textDecoration:"none",fontWeight:500}}>{tr.phone}</a>
                           </div>
@@ -1179,7 +1191,7 @@ export default function TVHindelangApp() {
                     <div style={{padding: 20, textAlign: "center", color: B.midGrey, fontSize: 13}}>Keine aktiven Chats.</div>
                   )}
                   {visibleThreads.map(th=>{
-                    const last=th.messages?.slice(-1)[0]; 
+                    const last = Array.isArray(th.messages) && th.messages.length > 0 ? th.messages[th.messages.length - 1] : null;
                     const isActive=activeThread?.id===th.id;
                     const isUnread = checkUnread(th);
                     
@@ -1193,7 +1205,7 @@ export default function TVHindelangApp() {
                     return (
                       <div key={th.id} style={{padding:"11px 14px",display:"flex",gap:10,alignItems:"center",cursor:"pointer",background:isActive?B.tealLight:"transparent",borderBottom:`1px solid ${B.lightGrey}`,transition:"background .15s"}} onClick={()=>openChat(th)}>
                         <div style={{width:38,height:38,borderRadius:th.type==="group"?"10px":"50%",background:`linear-gradient(135deg,${B.teal},${B.tealDark})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,color:"white",fontWeight:800,flexShrink:0}}>
-                          {th.type==="group"?"👥":displayLabel?.slice(0,2).toUpperCase()}
+                          {th.type==="group"?"👥":String(displayLabel||"").slice(0,2).toUpperCase()}
                         </div>
                         <div style={{flex:1,minWidth:0}}>
                           <div style={{fontWeight:isUnread?900:700,fontSize:14,color:isActive?B.teal:B.anthracite,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{displayLabel}</div>
@@ -1217,7 +1229,7 @@ export default function TVHindelangApp() {
                     <div style={{padding:"14px 20px",borderBottom:`1.5px solid ${B.lightGrey}`,display:"flex",alignItems:"center",gap:12,background:B.white,flexShrink:0}}>
                       <button className="mobile-back-btn" onClick={() => setActiveThread(null)}>←</button>
                       <div style={{width:38,height:38,borderRadius:activeThread.type==="group"?"10px":"50%",background:`linear-gradient(135deg,${B.teal},${B.tealDark})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,color:"white",fontWeight:800}}>
-                        {activeThread.type==="group"?"👥":activeThread.label?.slice(0,2).toUpperCase()}
+                        {activeThread.type==="group"?"👥":String(activeThread.label||"").slice(0,2).toUpperCase()}
                       </div>
                       <div>
                         <div style={{fontWeight:800,fontSize:15}}>
@@ -1362,13 +1374,13 @@ export default function TVHindelangApp() {
                           <div style={{fontWeight:800,fontSize:16,marginBottom:4}}>{n.title}</div>
                           <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif",lineHeight:1.5,marginBottom:6}}>{n.body}</div>
                           
-                          {n.fileUrl && (n.fileName?.toLowerCase().match(/\.(jpg|jpeg|png|gif)$/i)) ? (
+                          {n.fileUrl && isImageFile(n.fileName) ? (
                             <a href={n.fileUrl} target="_blank" rel="noopener noreferrer" style={{display:"block", marginTop:8, marginBottom:6}}>
                               <img src={n.fileUrl} alt="Anhang" style={{maxWidth:"100%", maxHeight:120, objectFit:"cover", borderRadius:6, border:`1px solid ${B.lightGrey}`}} />
                             </a>
                           ) : n.fileUrl ? (
                             <a href={n.fileUrl} target="_blank" rel="noopener noreferrer" style={{display:"inline-block", marginBottom:6, fontSize:12, fontWeight:700, color:B.amber, textDecoration:"none", borderBottom:`1px solid ${B.amber}`}}>
-                              📎 {n.fileName}
+                              📎 {n.fileName || "Anhang öffnen"}
                             </a>
                           ) : null}
 
@@ -1540,7 +1552,7 @@ export default function TVHindelangApp() {
                 </div>
               </div>
               <div style={{display:"flex",gap:10,marginTop:4}}>
-                <button className="btn btn-ghost" style={{flex:1}} onClick={()=>{setShowEventModal(false); setNewsSaving(false);}}>Abbrechen</button>
+                <button className="btn btn-ghost" style={{flex:1}} onClick={()=>setShowEventModal(false)}>Abbrechen</button>
                 <button className="btn btn-primary" style={{flex:2}} onClick={saveEvent} disabled={!eventForm.title || !eventForm.date || (eventForm.isRecurring && !eventForm.recurringEndDate)}>
                   {editingEvent ? "✓ Speichern" : (eventForm.isRecurring ? "🔄 Serie erstellen" : "+ Erstellen")}
                 </button>
