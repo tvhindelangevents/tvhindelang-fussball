@@ -7,9 +7,6 @@ import {
 import {
   getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword
 } from "firebase/auth";
-import {
-  getStorage, ref, uploadBytes, getDownloadURL
-} from "firebase/storage";
 
 // ─── FIREBASE ────────────────────────────────────────────────
 const firebaseConfig = {
@@ -25,7 +22,6 @@ const firebaseConfig = {
 const firebaseApp = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 const db      = getFirestore(firebaseApp);
 const auth    = getAuth(firebaseApp);
-const storage = getStorage(firebaseApp);
 
 const secondaryApp = getApps().find(a => a.name === "Secondary") || initializeApp(firebaseConfig, "Secondary");
 const secondaryAuth = getAuth(secondaryApp);
@@ -72,7 +68,6 @@ const Chip = ({ bg, c, border, children }) => (
 );
 
 // ─── DER TITAN-SCHUTZSCHILD FÜR DATEN ───
-// Verhindert jeglichen React-Absturz durch korrupte Datenbank-Einträge
 const safeStr = (val) => {
   if (val === null || val === undefined) return "";
   if (typeof val === 'string') return val;
@@ -102,17 +97,17 @@ const isImageFile = (filename) => {
   return /\.(jpg|jpeg|png|gif|webp)$/i.test(filename);
 };
 
-// ─── BILD-KOMPRIMIERUNG FÜR SCHNELLEN UPLOAD ───
-const compressImage = (file, maxWidth = 1200, maxHeight = 1200, quality = 0.7) => {
-  return new Promise((resolve) => {
-    // 3-Sekunden Notfall-Timer verhindert, dass der Upload einfriert!
+// ─── NEU: DATENBANK-TRICK (BILD ZU TEXT UMWANDELN) ───
+const compressImageToBase64 = (file, maxWidth = 1000, maxHeight = 1000, quality = 0.6) => {
+  return new Promise((resolve, reject) => {
+    // Wenn das Handy zu lange braucht, werfen wir einen Fehler, anstatt aufzuhängen
     const fallbackTimer = setTimeout(() => {
-      resolve(file); 
-    }, 3000);
+      reject(new Error("Zeitüberschreitung beim Komprimieren")); 
+    }, 4000);
 
     try {
       const img = new Image();
-      const objectUrl = URL.createObjectURL(file); // Speicherschonender Weg
+      const objectUrl = URL.createObjectURL(file); 
 
       img.onload = () => {
         URL.revokeObjectURL(objectUrl);
@@ -131,28 +126,22 @@ const compressImage = (file, maxWidth = 1200, maxHeight = 1200, quality = 0.7) =
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, width, height);
 
-        canvas.toBlob((blob) => {
-          clearTimeout(fallbackTimer);
-          if (blob) {
-            const newName = file.name.replace(/\.[^/.]+$/, ".jpg");
-            const compressedFile = new File([blob], newName, { type: 'image/jpeg', lastModified: Date.now() });
-            resolve(compressedFile);
-          } else {
-            resolve(file);
-          }
-        }, 'image/jpeg', quality);
+        // Wandelt das Bild direkt in einen speicherbaren Text-Code (Base64) um!
+        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        clearTimeout(fallbackTimer);
+        resolve(dataUrl);
       };
 
       img.onerror = () => {
         clearTimeout(fallbackTimer);
         URL.revokeObjectURL(objectUrl);
-        resolve(file);
+        reject(new Error("Bild konnte nicht geladen werden"));
       };
 
       img.src = objectUrl;
     } catch (e) {
       clearTimeout(fallbackTimer);
-      resolve(file);
+      reject(e);
     }
   });
 };
@@ -513,35 +502,50 @@ export default function TVHindelangApp() {
   const openAddNews = () => { setEditingNews(null); setNewsForm({title:"", body:"", fileUrl:"", fileName:"", fileObj:null}); setShowNewsModal(true); };
   const openEditNews = (n) => { setEditingNews(n); setNewsForm({title:n.title, body:n.body, fileUrl:n.fileUrl||"", fileName:n.fileName||"", fileObj:null}); setShowNewsModal(true); };
   
+  // HIER PASSIERT DIE MAGIE: BILD WIRD ALS TEXT IN DER DATENBANK GESPEICHERT
   const saveNews = async () => {
     if (!newsForm.title || !newsForm.body) return;
     setNewsSaving(true);
-    let finalFileUrl = newsForm.fileUrl; let finalFileName = newsForm.fileName;
+    
+    let finalFileUrl = newsForm.fileUrl; 
+    let finalFileName = newsForm.fileName;
     
     if (newsForm.fileObj) {
-      try {
-        let fileToUpload = newsForm.fileObj;
-        
-        if (isImageFile(fileToUpload.name)) {
-          fileToUpload = await compressImage(fileToUpload);
-        }
+      if (!isImageFile(newsForm.fileObj.name)) {
+        alert("Ohne kostenpflichtiges Cloud-Upgrade sind hier aus Sicherheitsgründen aktuell nur Bilder (JPG, PNG) erlaubt.");
+        setNewsSaving(false);
+        return;
+      }
 
-        const fileRef = ref(storage, `news/${Date.now()}_${fileToUpload.name}`);
-        await uploadBytes(fileRef, fileToUpload);
-        finalFileUrl = await getDownloadURL(fileRef); 
-        finalFileName = fileToUpload.name;
-      } catch (err) { 
-        console.error("Upload Fehler:", err); 
-        alert("Fehler beim Hochladen.");
+      try {
+        // Das Bild wird komprimiert und direkt in einen Base64-Text umgewandelt!
+        finalFileUrl = await compressImageToBase64(newsForm.fileObj);
+        finalFileName = newsForm.fileObj.name;
+      } catch (err) {
+        alert("Das Bild konnte nicht verarbeitet werden. Bitte ein anderes Bild versuchen.");
+        setNewsSaving(false);
+        return;
       }
     }
 
-    const newsData = { title: newsForm.title, body: newsForm.body, fileUrl: finalFileUrl, fileName: finalFileName };
-    if (editingNews) {
-      await updateDoc(doc(db,"news",editingNews.id), newsData);
-    } else {
-      await addDoc(collection(db,"news"), { ...newsData, date:todayStr, author: user?.email||"Admin", createdAt:serverTimestamp() });
+    // Sicherstellen, dass das Base64-Bild nicht das 1-MB-Limit der Datenbank sprengt
+    if (finalFileUrl && finalFileUrl.length > 950000) {
+      alert("Dieses Bild ist leider extrem detailreich und nach der Komprimierung immer noch zu groß für die Datenbank. Bitte wähle ein anderes aus.");
+      setNewsSaving(false);
+      return;
     }
+
+    const newsData = { title: newsForm.title, body: newsForm.body, fileUrl: finalFileUrl, fileName: finalFileName };
+    try {
+      if (editingNews) {
+        await updateDoc(doc(db,"news",editingNews.id), newsData);
+      } else {
+        await addDoc(collection(db,"news"), { ...newsData, date:todayStr, author: user?.email||"Admin", createdAt:serverTimestamp() });
+      }
+    } catch (e) {
+      alert("Fehler beim Speichern in der Datenbank: " + e.message);
+    }
+    
     setNewsSaving(false); 
     setShowNewsModal(false);
   };
@@ -1070,13 +1074,10 @@ export default function TVHindelangApp() {
                     <div style={{fontWeight:800,fontSize:14,marginBottom:3}}>{safeStr(n.title)}</div>
                     <div style={{fontSize:12,color:B.charcoal,fontFamily:"'Barlow',sans-serif",lineHeight:1.5}}>{safeStr(n.body).slice(0,90)}{safeStr(n.body).length>90?"…":""}</div>
                     
-                    {n.fileUrl && isImageFile(n.fileName) ? (
+                    {/* BILD-VORSCHAU FÜR BASE64 BILDER */}
+                    {n.fileUrl && n.fileUrl.startsWith("data:image") ? (
                       <a href={n.fileUrl} target="_blank" rel="noopener noreferrer" style={{display:"block", marginTop:8}}>
                         <img src={n.fileUrl} alt="News Anhang" style={{width:"100%", maxHeight:160, objectFit:"cover", borderRadius:6, border:`1px solid ${B.lightGrey}`}} />
-                      </a>
-                    ) : n.fileUrl ? (
-                      <a href={n.fileUrl} target="_blank" rel="noopener noreferrer" style={{display:"inline-block", marginTop:6, fontSize:11, fontWeight:700, color:B.amber, textDecoration:"none", borderBottom:`1px solid ${B.amber}`}}>
-                        📎 {safeStr(n.fileName) || "Anhang öffnen"}
                       </a>
                     ) : null}
                     
@@ -1475,13 +1476,10 @@ export default function TVHindelangApp() {
                           <div style={{fontWeight:800,fontSize:16,marginBottom:4}}>{safeStr(n.title) || "Ohne Titel"}</div>
                           <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif",lineHeight:1.5,marginBottom:6}}>{safeStr(n.body).slice(0,90)}{safeStr(n.body).length>90?"…":""}</div>
                           
-                          {n.fileUrl && isImageFile(n.fileName) ? (
+                          {/* BILD-VORSCHAU FÜR BASE64 BILDER */}
+                          {n.fileUrl && n.fileUrl.startsWith("data:image") ? (
                             <a href={n.fileUrl} target="_blank" rel="noopener noreferrer" style={{display:"block", marginTop:8, marginBottom:6}}>
                               <img src={n.fileUrl} alt="Anhang" style={{maxWidth:"100%", maxHeight:120, objectFit:"cover", borderRadius:6, border:`1px solid ${B.lightGrey}`}} />
-                            </a>
-                          ) : n.fileUrl ? (
-                            <a href={n.fileUrl} target="_blank" rel="noopener noreferrer" style={{display:"inline-block", marginBottom:6, fontSize:12, fontWeight:700, color:B.amber, textDecoration:"none", borderBottom:`1px solid ${B.amber}`}}>
-                              📎 {safeStr(n.fileName) || "Anhang öffnen"}
                             </a>
                           ) : null}
 
@@ -1678,12 +1676,12 @@ export default function TVHindelangApp() {
                 <textarea className="input" style={{minHeight:100}} value={newsForm.body} onChange={e=>setNewsForm({...newsForm,body:e.target.value})}/>
               </div>
               
-              <div><label style={LBL}>Dateianhang (Bilder, PDF, DOCX)</label>
-                <input className="input" type="file" accept="image/jpeg,image/png,image/gif,.pdf,.doc,.docx,.xls,.xlsx" 
+              <div><label style={LBL}>Bild-Anhang (JPG, PNG)</label>
+                <input className="input" type="file" accept="image/jpeg,image/png,image/gif,image/webp" 
                   onChange={e=>setNewsForm({...newsForm, fileObj: e.target.files[0]})} />
                 {newsForm.fileName && !newsForm.fileObj && (
                   <div style={{fontSize:12, color:B.charcoal, marginTop:6}}>
-                    Aktueller Anhang: <a href={newsForm.fileUrl} target="_blank" rel="noopener noreferrer" style={{color:B.teal, fontWeight:700}}>{newsForm.fileName}</a>
+                    Aktueller Anhang: <span style={{color:B.teal, fontWeight:700}}>Bild vorhanden</span>
                   </div>
                 )}
                 {newsForm.fileObj && (
@@ -1696,7 +1694,7 @@ export default function TVHindelangApp() {
               <div style={{display:"flex",gap:10,marginTop:8}}>
                 <button className="btn btn-ghost" style={{flex:1}} onClick={()=>{setShowNewsModal(false); setNewsSaving(false);}}>Abbrechen</button>
                 <button className="btn btn-primary" style={{flex:2}} onClick={saveNews} disabled={!newsForm.title||!newsForm.body||newsSaving}>
-                  {newsSaving ? "Wird hochgeladen..." : (editingNews ? "✓ Speichern" : "📢 Veröffentlichen")}
+                  {newsSaving ? "Wird verarbeitet..." : (editingNews ? "✓ Speichern" : "📢 Veröffentlichen")}
                 </button>
               </div>
             </div>
