@@ -112,6 +112,7 @@ export default function TVHindelangApp() {
 
   const [view, setView]             = useState("home");
   const [filterTeam, setFilterTeam] = useState("Alle Mannschaften");
+  const [filterEventType, setFilterEventType] = useState("all"); // NEUER FILTER-STATE FÜR TYP
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState(null);
   const [selectedTeam, setSelectedTeam] = useState(null);
@@ -223,7 +224,6 @@ export default function TVHindelangApp() {
 
   const handleLogout = async () => { await signOut(auth); setView("home"); };
 
-  // ── CSV IMPORT LOGIK ────────────────────────
   const handleCSVUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -286,7 +286,6 @@ export default function TVHindelangApp() {
 
         if (!rawDate || !heim || !gast) continue; 
 
-        // DATUM BEREINIGEN
         let cleanDate = rawDate.replace(/^[a-zA-ZäöüßÄÖÜ]{2}\.?\s*/, ''); 
         let formattedDate = "";
         const deMatch = cleanDate.match(/(\d{1,2})\.(\d{1,2})\.?(\d{2,4})?/); 
@@ -302,7 +301,6 @@ export default function TVHindelangApp() {
         } else { continue; }
         if (isNaN(new Date(formattedDate).getTime())) continue;
 
-        // UHRZEIT BEREINIGEN
         let formattedTime = "12:00"; 
         if (rawTime) {
             let tClean = rawTime.replace(".", ":").trim();
@@ -310,11 +308,9 @@ export default function TVHindelangApp() {
             if (tMatch) formattedTime = `${tMatch[1].padStart(2, '0')}:${tMatch[2]}`;
         }
 
-        // ORT KOMBINIEREN
         let fullLocation = [spielstaette, ort].filter(Boolean).join(", ");
         if (!fullLocation) fullLocation = "Ort unbekannt";
 
-        // TITEL ERMITTELN
         let title = `${heim} vs. ${gast}`;
         let teamNameRaw = mannschaftsart || "Verein"; 
         
@@ -324,7 +320,6 @@ export default function TVHindelangApp() {
           title = `Auswärts bei ${heim}`;
         }
 
-        // ─── SMART TEAM MAPPING (Jugend vs Junioren) ───
         let finalTeamName = teamNameRaw;
         let matchedTeam = teams.find(t => {
           const eName = t.name.toLowerCase().trim();
@@ -339,13 +334,11 @@ export default function TVHindelangApp() {
         });
 
         if (matchedTeam) {
-          finalTeamName = matchedTeam.name; // Nutze den exakten Namen des manuell angelegten Teams!
+          finalTeamName = matchedTeam.name;
         } else {
-          // Fallback: Mache aus Junioren standardmäßig Jugend für eine saubere Optik
           finalTeamName = teamNameRaw.replace(/Junioren/g, "Jugend").replace(/Juniorinnen/g, "Mädchen");
         }
 
-        // ZUSATZINFOS BÜNDELN
         let extraInfos = [];
         if(typ) extraInfos.push(typ);
         if(staffel) extraInfos.push(`Staffel: ${staffel}`);
@@ -399,7 +392,6 @@ export default function TVHindelangApp() {
     await updateDoc(doc(db, "events", ev.id), { declines: newDeclines });
   };
 
-  // ── Event CRUD & RECURRING LOGIK ───────────────────────────────────────────
   const openAddEvent = (date="") => { setEditingEvent(null); setEventForm(emptyEvent(date)); setShowEventModal(true); };
   const openEditEvent = (ev) => { 
     setEditingEvent(ev); 
@@ -528,10 +520,18 @@ export default function TVHindelangApp() {
     setShowNewThread(false); setNewThreadName("");
   };
 
-  const matchesFilter = (ev) => filterTeam==="Alle Mannschaften"||ev.team===filterTeam;
+  // ── NEUE DOPPEL-FILTER LOGIK ──
+  const matchesFilter = (ev) => {
+    const teamMatch = filterTeam === "Alle Mannschaften" || ev.team === filterTeam;
+    const typeMatch = filterEventType === "all" || ev.type === filterEventType;
+    return teamMatch && typeMatch;
+  };
+  
   const getDay = (day) => { const d=`${year}-${String(month+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`; return events.filter(e=>e.date===d&&matchesFilter(e)); };
   const selectedStr = selectedDay ? `${year}-${String(month+1).padStart(2,"0")}-${String(selectedDay).padStart(2,"0")}` : "";
   const selectedEvs = selectedDay ? events.filter(e=>e.date===selectedStr&&matchesFilter(e)).sort((a,b)=>(a.time||"").localeCompare(b.time||"")) : [];
+  
+  // HINWEIS: Auf der Startseite (upcoming/nextThree) wenden wir den Filter in der Regel NICHT an, damit man dort immer alles sieht.
   const upcoming    = [...events].filter(e=>(e.date||"")>=todayStr&&matchesFilter(e)).sort((a,b)=>(a.date||"").localeCompare(b.date||"")||(a.time||"").localeCompare(b.time||"")).slice(0,10);
   const nextThree   = [...events].filter(e=>(e.date||"")>=todayStr).sort((a,b)=>(a.date||"").localeCompare(b.date||"")||(a.time||"").localeCompare(b.time||"")).slice(0,3);
 
@@ -783,15 +783,26 @@ export default function TVHindelangApp() {
       {/* ── FILTER & LEGENDE BAR (DYNAMIC) ── */}
       {(view==="calendar"||view==="schedule")&&(
         <div style={{background:B.white,borderBottom:`1.5px solid ${B.lightGrey}`,flexShrink:0}}>
-          {/* Filter Row */}
-          <div className="hide-scroll" style={{padding:"12px 24px",display:"flex",alignItems:"center",gap:10, borderBottom:`1px dashed ${B.lightGrey}`}}>
-            <span style={{fontSize:12,fontWeight:800,color:B.midGrey,letterSpacing:1,textTransform:"uppercase",flexShrink:0}}>🔍 Filter:</span>
+          
+          {/* 1. Team Filter Row */}
+          <div className="hide-scroll" style={{padding:"10px 24px",display:"flex",alignItems:"center",gap:10, borderBottom:`1px dashed ${B.lightGrey}`}}>
+            <span style={{fontSize:12,fontWeight:800,color:B.midGrey,letterSpacing:1,textTransform:"uppercase",flexShrink:0}}>👥 Team:</span>
             {teamNames.map(t=>(
               <button key={t} className="pill" style={{background:filterTeam===t?B.teal:B.offWhite,color:filterTeam===t?B.white:B.midGrey}} onClick={()=>setFilterTeam(t)}>{t}</button>
             ))}
           </div>
-          {/* Legend Row */}
-          <div className="hide-scroll" style={{padding:"10px 24px",display:"flex",alignItems:"center",gap:16}}>
+
+          {/* 2. Typ Filter Row (NEU) */}
+          <div className="hide-scroll" style={{padding:"10px 24px",display:"flex",alignItems:"center",gap:10, borderBottom:`1px dashed ${B.lightGrey}`}}>
+            <span style={{fontSize:12,fontWeight:800,color:B.midGrey,letterSpacing:1,textTransform:"uppercase",flexShrink:0}}>🏷️ Typ:</span>
+            <button className="pill" style={{background:filterEventType==="all"?B.anthracite:B.offWhite,color:filterEventType==="all"?B.white:B.midGrey}} onClick={()=>setFilterEventType("all")}>Alle</button>
+            {EVENT_TYPES.map(t=>(
+              <button key={t.value} className="pill" style={{background:filterEventType===t.value?t.color:B.offWhite,color:filterEventType===t.value?B.white:B.midGrey}} onClick={()=>setFilterEventType(t.value)}>{t.label}</button>
+            ))}
+          </div>
+
+          {/* 3. Legend Row */}
+          <div className="hide-scroll" style={{padding:"8px 24px",display:"flex",alignItems:"center",gap:16}}>
             <span style={{fontSize:11,fontWeight:800,color:B.midGrey,letterSpacing:1,textTransform:"uppercase",flexShrink:0}}>🎨 Legende:</span>
             {EVENT_TYPES.map(t=>(
               <div key={t.value} style={{display:"flex",alignItems:"center",gap:5,fontSize:12,fontWeight:600,color:B.charcoal,flexShrink:0}}>
@@ -802,6 +813,7 @@ export default function TVHindelangApp() {
               <div style={{width:12,height:12,borderRadius:3,background:BUS.color}}/>🚌 Bus
             </div>
           </div>
+
         </div>
       )}
 
@@ -1334,15 +1346,24 @@ export default function TVHindelangApp() {
         )}
       </main>
 
-      {/* ── FOOTER ── */}
-      <footer style={{background:B.white,borderTop:`1.5px solid ${B.lightGrey}`,padding:"10px 24px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
-        <div style={{fontSize:11,color:B.midGrey,fontWeight:600}}>© TV Hindelang Fussball</div>
-        <div style={{display:"flex",gap:20}}>
-          {[["Impressum","https://share.google/fPlP9Wjcsvyabws2C"],["Datenschutz","https://share.google/887uLP0KRXJTx68Ws"]].map(([label,url])=>(
-            <a key={label} href={url} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:B.midGrey,fontWeight:700,letterSpacing:1,textTransform:"uppercase",textDecoration:"none"}}>{label}</a>
-          ))}
-        </div>
-      </footer>
+      {/* ── MOBILE BOTTOM NAV ── */}
+      <nav className="bottom-nav">
+        {NAV.map(({id,icon,label})=>(
+          <button key={id} className={`bottom-nav-item ${view===id?"active":""}`} onClick={()=>{setView(id);setSelectedTeam(null); setActiveThread(null);}}>
+            <div className="bottom-nav-icon">{icon}</div>
+            {label}
+          </button>
+        ))}
+        {canAccessAdmin&&(
+          <button className={`bottom-nav-item ${view==="admin"?"active":""}`} onClick={()=>{
+            setView("admin");
+            if(isTrainer && !isAdmin && adminSection !== "events" && adminSection !== "news") setAdminSection("events");
+          }}>
+            <div className="bottom-nav-icon">⚙️</div>
+            Admin
+          </button>
+        )}
+      </nav>
 
       {/* ════ EVENT MODAL ════ */}
       {showEventModal&&(
