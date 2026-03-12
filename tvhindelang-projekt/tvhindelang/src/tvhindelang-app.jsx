@@ -95,15 +95,21 @@ const isImageFile = (filename) => {
   return /\.(jpg|jpeg|png|gif|webp)$/i.test(filename);
 };
 
-// BILD-KOMPRIMIERUNG FÜR SCHNELLEN UPLOAD
+// NEU: SCHNELLE & SICHERE BILD-KOMPRIMIERUNG MIT TIMEOUT
 const compressImage = (file, maxWidth = 1200, maxHeight = 1200, quality = 0.7) => {
   return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = (event) => {
+    // SICHERHEITS-NETZ: Wenn es länger als 3 Sekunden dauert -> Abbruch & Original hochladen!
+    const fallbackTimer = setTimeout(() => {
+      resolve(file);
+    }, 3000);
+
+    try {
       const img = new Image();
-      img.src = event.target.result;
+      // Nutzt Objektreferenz statt Base64 (verhindert Speicher-Überlauf auf iPhones)
+      const objectUrl = URL.createObjectURL(file);
+
       img.onload = () => {
+        URL.revokeObjectURL(objectUrl); // Speicher direkt wieder freigeben
         let width = img.width;
         let height = img.height;
 
@@ -120,18 +126,28 @@ const compressImage = (file, maxWidth = 1200, maxHeight = 1200, quality = 0.7) =
         ctx.drawImage(img, 0, 0, width, height);
 
         canvas.toBlob((blob) => {
+          clearTimeout(fallbackTimer); // Erfolgreich! Timer stoppen.
           if (blob) {
-            const newName = file.name.replace(/\.[^/.]+$/, ".jpg");
+            const newName = file.name.replace(/\.[^/.]+$/, ".jpg"); // Konvertierung zu JPG
             const compressedFile = new File([blob], newName, { type: 'image/jpeg', lastModified: Date.now() });
             resolve(compressedFile);
           } else {
-            resolve(file); 
+            resolve(file); // Bei Blob-Fehler: Original nutzen
           }
         }, 'image/jpeg', quality);
       };
-      img.onerror = () => resolve(file);
-    };
-    reader.onerror = () => resolve(file);
+
+      img.onerror = () => {
+        clearTimeout(fallbackTimer);
+        URL.revokeObjectURL(objectUrl);
+        resolve(file); // Bei Lade-Fehler: Original nutzen
+      };
+
+      img.src = objectUrl;
+    } catch (e) {
+      clearTimeout(fallbackTimer);
+      resolve(file); // Bei System-Fehler: Original nutzen
+    }
   });
 };
 
@@ -499,16 +515,19 @@ export default function TVHindelangApp() {
     if (newsForm.fileObj) {
       try {
         let fileToUpload = newsForm.fileObj;
+        
+        // KOMPRIMIERUNG WIRD HIER AUFGERUFEN
         if (isImageFile(fileToUpload.name)) {
           fileToUpload = await compressImage(fileToUpload);
         }
+
         const fileRef = ref(storage, `news/${Date.now()}_${fileToUpload.name}`);
         await uploadBytes(fileRef, fileToUpload);
         finalFileUrl = await getDownloadURL(fileRef); 
         finalFileName = fileToUpload.name;
       } catch (err) { 
         console.error("Upload Fehler:", err); 
-        alert("Fehler beim Hochladen der Datei.");
+        alert("Fehler beim Hochladen. Originaldatei verwendet oder fehlgeschlagen.");
       }
     }
 
@@ -733,16 +752,6 @@ export default function TVHindelangApp() {
         </div>
       </div>
     );
-  };
-
-  const getAdminTabs = () => {
-    const tabs = [];
-    if (isAdmin) tabs.push({ id: "teams", label: "👥 Mannschaften" });
-    if (canEditEvents) tabs.push({ id: "events", label: "📅 Termine" });
-    if (canEditNews) tabs.push({ id: "news", label: "📢 News" });
-    if (isAdmin) tabs.push({ id: "users", label: "👤 Benutzer" });
-    if (isAdmin) tabs.push({ id: "intro", label: "🏠 Startseite" });
-    return tabs;
   };
 
   if (authLoading) return (
@@ -1045,6 +1054,7 @@ export default function TVHindelangApp() {
                     <div style={{fontWeight:800,fontSize:14,marginBottom:3}}>{String(n.title || "")}</div>
                     <div style={{fontSize:12,color:B.charcoal,fontFamily:"'Barlow',sans-serif",lineHeight:1.5}}>{String(n.body || "").slice(0,90)}{(String(n.body||"").length)>90?"…":""}</div>
                     
+                    {/* BILD-VORSCHAU ODER TEXT-LINK */}
                     {n.fileUrl && isImageFile(n.fileName) ? (
                       <a href={n.fileUrl} target="_blank" rel="noopener noreferrer" style={{display:"block", marginTop:8}}>
                         <img src={n.fileUrl} alt="News Anhang" style={{width:"100%", maxHeight:160, objectFit:"cover", borderRadius:6, border:`1px solid ${B.lightGrey}`}} />
@@ -1804,14 +1814,17 @@ export default function TVHindelangApp() {
             {newThreadType==="group"
               ? <div><label style={LBL}>Mannschaft</label>
                   <select className="input" value={newThreadTeam} onChange={e=>setNewThreadTeam(e.target.value)}>
-                    {teams.map(t=><option key={t.id} value={t.name}>{String(t?.name||"")}</option>)}
+                    {teams.map(t=>{
+                      if (!t) return null;
+                      return <option key={t.id} value={t.name}>{String(t.name||"")}</option>
+                    })}
                   </select>
                 </div>
               : <div><label style={LBL}>Empfänger</label>
                   <select className="input" value={newThreadRecipientId} onChange={e=>setNewThreadRecipientId(e.target.value)}>
                     <option value="">Bitte wählen...</option>
-                    {allUsers.filter(u => u?.id !== user?.uid).map(u => (
-                      <option key={u.id} value={u.id}>{String(u?.name || u?.email || "")}</option>
+                    {allUsers.filter(u => u && u.id !== user?.uid).map(u => (
+                      <option key={u.id} value={u.id}>{String(u.name || u.email || "")}</option>
                     ))}
                   </select>
                 </div>
