@@ -89,22 +89,22 @@ const safeDateObj = (dateString) => {
   };
 };
 
-// SICHERER CHECK FÜR BILDER (Verhindert Absturz bei fehlenden Dateinamen)
 const isImageFile = (filename) => {
   if (!filename || typeof filename !== 'string') return false;
   return /\.(jpg|jpeg|png|gif|webp)$/i.test(filename);
 };
 
-// SCHNELLE BILD-KOMPRIMIERUNG MIT TIMEOUT
+// ─── NEU: SPEICHERSCHONENDE KOMPRIMIERUNG ───
 const compressImage = (file, maxWidth = 1200, maxHeight = 1200, quality = 0.7) => {
   return new Promise((resolve) => {
+    // 3-Sekunden Notfall-Timer verhindert, dass der Upload einfriert!
     const fallbackTimer = setTimeout(() => {
-      resolve(file); // Wenn es länger als 3 Sekunden dauert: Originalbild nutzen!
+      resolve(file); 
     }, 3000);
 
     try {
       const img = new Image();
-      const objectUrl = URL.createObjectURL(file); // Speicherschonender Weg
+      const objectUrl = URL.createObjectURL(file); // Speicherschonender Trick
 
       img.onload = () => {
         URL.revokeObjectURL(objectUrl);
@@ -510,7 +510,7 @@ export default function TVHindelangApp() {
       try {
         let fileToUpload = newsForm.fileObj;
         
-        // KOMPRIMIERUNG WIRD HIER AUFGERUFEN
+        // KOMPRIMIERUNG HIER AUFRUFEN
         if (isImageFile(fileToUpload.name)) {
           fileToUpload = await compressImage(fileToUpload);
         }
@@ -1040,15 +1040,15 @@ export default function TVHindelangApp() {
                     <div style={{fontSize:12,color:B.charcoal,fontFamily:"'Barlow',sans-serif",lineHeight:1.5}}>{n.body?.slice(0,90)}{(n.body?.length||0)>90?"…":""}</div>
                     
                     {n.fileUrl && isImageFile(n.fileName) ? (
-                      <a href={n.fileUrl} target="_blank" rel="noopener noreferrer" style={{display:"block", marginTop:8}}>
-                        <img src={n.fileUrl} alt="News Anhang" style={{width:"100%", maxHeight:160, objectFit:"cover", borderRadius:6, border:`1px solid ${B.lightGrey}`}} />
+                      <a href={n.fileUrl} target="_blank" rel="noopener noreferrer" style={{display:"block", marginTop:8, marginBottom:6}}>
+                        <img src={n.fileUrl} alt="Anhang" style={{maxWidth:"100%", maxHeight:120, objectFit:"cover", borderRadius:6, border:`1px solid ${B.lightGrey}`}} />
                       </a>
                     ) : n.fileUrl ? (
-                      <a href={n.fileUrl} target="_blank" rel="noopener noreferrer" style={{display:"inline-block", marginTop:6, fontSize:11, fontWeight:700, color:B.amber, textDecoration:"none", borderBottom:`1px solid ${B.amber}`}}>
+                      <a href={n.fileUrl} target="_blank" rel="noopener noreferrer" style={{display:"inline-block", marginBottom:6, fontSize:12, fontWeight:700, color:B.amber, textDecoration:"none", borderBottom:`1px solid ${B.amber}`}}>
                         📎 {n.fileName || "Anhang öffnen"}
                       </a>
                     ) : null}
-                    
+
                     <div style={{fontSize:10,color:B.midGrey,marginTop:6,fontWeight:600}}>{n.date} · {n.author}</div>
                   </div>
                 ))}
