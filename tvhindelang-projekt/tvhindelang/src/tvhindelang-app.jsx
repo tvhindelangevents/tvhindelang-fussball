@@ -97,12 +97,11 @@ const isImageFile = (filename) => {
   return /\.(jpg|jpeg|png|gif|webp)$/i.test(filename);
 };
 
-// ─── NEU: DATENBANK-TRICK (BILD ZU TEXT UMWANDELN) ───
+// ─── DATENBANK-TRICK (BILD ZU TEXT UMWANDELN OHNE STORAGE) ───
 const compressImageToBase64 = (file, maxWidth = 1000, maxHeight = 1000, quality = 0.6) => {
   return new Promise((resolve, reject) => {
-    // Wenn das Handy zu lange braucht, werfen wir einen Fehler, anstatt aufzuhängen
     const fallbackTimer = setTimeout(() => {
-      reject(new Error("Zeitüberschreitung beim Komprimieren")); 
+      reject(new Error("Zeitüberschreitung beim Verarbeiten des Bildes")); 
     }, 4000);
 
     try {
@@ -126,7 +125,7 @@ const compressImageToBase64 = (file, maxWidth = 1000, maxHeight = 1000, quality 
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, width, height);
 
-        // Wandelt das Bild direkt in einen speicherbaren Text-Code (Base64) um!
+        // Wandelt das Bild direkt in Text um (für die Datenbank)
         const dataUrl = canvas.toDataURL('image/jpeg', quality);
         clearTimeout(fallbackTimer);
         resolve(dataUrl);
@@ -135,7 +134,7 @@ const compressImageToBase64 = (file, maxWidth = 1000, maxHeight = 1000, quality 
       img.onerror = () => {
         clearTimeout(fallbackTimer);
         URL.revokeObjectURL(objectUrl);
-        reject(new Error("Bild konnte nicht geladen werden"));
+        reject(new Error("Bild konnte vom Browser nicht gelesen werden."));
       };
 
       img.src = objectUrl;
@@ -217,7 +216,6 @@ export default function TVHindelangApp() {
   const daysInMonth = new Date(year,month+1,0).getDate();
   const todayStr = new Date().toISOString().slice(0,10);
 
-  // KUGELSICHERE FILTER-LISTE
   const uniqueTeams = Array.from(new Set([
     ...(teams || []).map(t => safeStr(t?.name)).filter(Boolean),
     ...(events || []).map(e => safeStr(e?.team)).filter(Boolean)
@@ -288,7 +286,6 @@ export default function TVHindelangApp() {
 
   const handleLogout = async () => { await signOut(auth); setView("home"); };
 
-  // ── CSV IMPORT LOGIK ────────────────────────
   const handleCSVUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -502,7 +499,7 @@ export default function TVHindelangApp() {
   const openAddNews = () => { setEditingNews(null); setNewsForm({title:"", body:"", fileUrl:"", fileName:"", fileObj:null}); setShowNewsModal(true); };
   const openEditNews = (n) => { setEditingNews(n); setNewsForm({title:n.title, body:n.body, fileUrl:n.fileUrl||"", fileName:n.fileName||"", fileObj:null}); setShowNewsModal(true); };
   
-  // HIER PASSIERT DIE MAGIE: BILD WIRD ALS TEXT IN DER DATENBANK GESPEICHERT
+  // DIE SICHERE NEWS-SPEICHERN-FUNKTION (NUR DATENBANK, KEIN STORAGE)
   const saveNews = async () => {
     if (!newsForm.title || !newsForm.body) return;
     setNewsSaving(true);
@@ -512,25 +509,23 @@ export default function TVHindelangApp() {
     
     if (newsForm.fileObj) {
       if (!isImageFile(newsForm.fileObj.name)) {
-        alert("Ohne kostenpflichtiges Cloud-Upgrade sind hier aus Sicherheitsgründen aktuell nur Bilder (JPG, PNG) erlaubt.");
+        alert("Bitte wähle nur ein Bild (JPG, PNG) aus. Dokumente (PDF/DOCX) werden hier nicht unterstützt.");
         setNewsSaving(false);
         return;
       }
 
       try {
-        // Das Bild wird komprimiert und direkt in einen Base64-Text umgewandelt!
         finalFileUrl = await compressImageToBase64(newsForm.fileObj);
         finalFileName = newsForm.fileObj.name;
       } catch (err) {
-        alert("Das Bild konnte nicht verarbeitet werden. Bitte ein anderes Bild versuchen.");
+        alert("Das Bild konnte nicht verarbeitet werden: " + err.message);
         setNewsSaving(false);
         return;
       }
     }
 
-    // Sicherstellen, dass das Base64-Bild nicht das 1-MB-Limit der Datenbank sprengt
     if (finalFileUrl && finalFileUrl.length > 950000) {
-      alert("Dieses Bild ist leider extrem detailreich und nach der Komprimierung immer noch zu groß für die Datenbank. Bitte wähle ein anderes aus.");
+      alert("Dieses Bild ist nach der Komprimierung immer noch zu groß für die Datenbank. Bitte wähle ein anderes aus.");
       setNewsSaving(false);
       return;
     }
@@ -1676,7 +1671,7 @@ export default function TVHindelangApp() {
                 <textarea className="input" style={{minHeight:100}} value={newsForm.body} onChange={e=>setNewsForm({...newsForm,body:e.target.value})}/>
               </div>
               
-              <div><label style={LBL}>Bild-Anhang (JPG, PNG)</label>
+              <div><label style={LBL}>Bild-Anhang (nur JPG, PNG)</label>
                 <input className="input" type="file" accept="image/jpeg,image/png,image/gif,image/webp" 
                   onChange={e=>setNewsForm({...newsForm, fileObj: e.target.files[0]})} />
                 {newsForm.fileName && !newsForm.fileObj && (
