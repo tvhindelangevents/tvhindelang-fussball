@@ -112,7 +112,7 @@ export default function TVHindelangApp() {
 
   const [view, setView]             = useState("home");
   const [filterTeam, setFilterTeam] = useState("Alle Mannschaften");
-  const [filterEventType, setFilterEventType] = useState("all"); // NEUER FILTER-STATE FÜR TYP
+  const [filterEventType, setFilterEventType] = useState("all"); 
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState(null);
   const [selectedTeam, setSelectedTeam] = useState(null);
@@ -134,7 +134,7 @@ export default function TVHindelangApp() {
   const [showNewThread, setShowNewThread]   = useState(false);
   const [newThreadType, setNewThreadType]   = useState("group");
   const [newThreadTeam, setNewThreadTeam]   = useState("Herren");
-  const [newThreadName, setNewThreadName]   = useState("");
+  const [newThreadRecipientId, setNewThreadRecipientId] = useState(""); // NEU: ID statt Name
 
   const [showUserModal, setShowUserModal]   = useState(false);
   const [editingUser, setEditingUser]       = useState(null);
@@ -160,7 +160,6 @@ export default function TVHindelangApp() {
   const daysInMonth = new Date(year,month+1,0).getDate();
   const todayStr = new Date().toISOString().slice(0,10);
 
-  // DYNAMISCHE FILTER-LISTE
   const uniqueTeams = Array.from(new Set([
     ...teams.map(t => t.name),
     ...events.map(e => e.team).filter(Boolean)
@@ -503,6 +502,7 @@ export default function TVHindelangApp() {
 
   const saveIntro = async (text) => { await setDoc(doc(db,"settings","intro"), { text }); };
 
+  // ── NEUE CHAT LOGIK (DATENSCHUTZ) ──
   const sendMessage = async () => {
     if (!chatInput.trim()||!activeThread) return;
     const myProfile = allUsers.find(u => u.id === user.uid);
@@ -513,14 +513,36 @@ export default function TVHindelangApp() {
     setActiveThread({...activeThread, messages: updated});
     setChatInput("");
   };
+
   const createThread = async () => {
-    const label = newThreadType==="group" ? newThreadTeam : newThreadName;
-    const ref = await addDoc(collection(db,"threads"), { type:newThreadType, label, team:newThreadType==="group"?newThreadTeam:"", messages:[] });
-    setActiveThread({ id:ref.id, type:newThreadType, label, team:newThreadType==="group"?newThreadTeam:"", messages:[] });
-    setShowNewThread(false); setNewThreadName("");
+    if (newThreadType === "group") {
+      const ref = await addDoc(collection(db,"threads"), { type:"group", label:newThreadTeam, team:newThreadTeam, messages:[] });
+      setActiveThread({ id:ref.id, type:"group", label:newThreadTeam, team:newThreadTeam, messages:[] });
+    } else {
+      // Prüfen, ob der Chat bereits existiert, um Duplikate zu vermeiden
+      const existing = threads.find(th => th.type === "direct" && th.participants?.includes(user.uid) && th.participants?.includes(newThreadRecipientId));
+      if (existing) {
+        setActiveThread(existing);
+      } else {
+        const ref = await addDoc(collection(db,"threads"), { 
+          type:"direct", 
+          participants: [user.uid, newThreadRecipientId], // Speichert die IDs privat
+          messages:[] 
+        });
+        setActiveThread({ id:ref.id, type:"direct", participants: [user.uid, newThreadRecipientId], messages:[] });
+      }
+    }
+    setShowNewThread(false); 
+    setNewThreadRecipientId("");
   };
 
-  // ── NEUE DOPPEL-FILTER LOGIK ──
+  // Chat-Liste filtern: Jeder sieht alle Gruppen, aber bei "direct" nur Chats, wo die eigene ID drinsteht.
+  const visibleThreads = threads.filter(th => {
+    if (th.type === "group") return true; 
+    if (th.type === "direct") return th.participants?.includes(user?.uid);
+    return false;
+  });
+
   const matchesFilter = (ev) => {
     const teamMatch = filterTeam === "Alle Mannschaften" || ev.team === filterTeam;
     const typeMatch = filterEventType === "all" || ev.type === filterEventType;
@@ -530,8 +552,6 @@ export default function TVHindelangApp() {
   const getDay = (day) => { const d=`${year}-${String(month+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`; return events.filter(e=>e.date===d&&matchesFilter(e)); };
   const selectedStr = selectedDay ? `${year}-${String(month+1).padStart(2,"0")}-${String(selectedDay).padStart(2,"0")}` : "";
   const selectedEvs = selectedDay ? events.filter(e=>e.date===selectedStr&&matchesFilter(e)).sort((a,b)=>(a.time||"").localeCompare(b.time||"")) : [];
-  
-  // HINWEIS: Auf der Startseite (upcoming/nextThree) wenden wir den Filter in der Regel NICHT an, damit man dort immer alles sieht.
   const upcoming    = [...events].filter(e=>(e.date||"")>=todayStr&&matchesFilter(e)).sort((a,b)=>(a.date||"").localeCompare(b.date||"")||(a.time||"").localeCompare(b.time||"")).slice(0,10);
   const nextThree   = [...events].filter(e=>(e.date||"")>=todayStr).sort((a,b)=>(a.date||"").localeCompare(b.date||"")||(a.time||"").localeCompare(b.time||"")).slice(0,3);
 
@@ -792,7 +812,7 @@ export default function TVHindelangApp() {
             ))}
           </div>
 
-          {/* 2. Typ Filter Row (NEU) */}
+          {/* 2. Typ Filter Row */}
           <div className="hide-scroll" style={{padding:"10px 24px",display:"flex",alignItems:"center",gap:10, borderBottom:`1px dashed ${B.lightGrey}`}}>
             <span style={{fontSize:12,fontWeight:800,color:B.midGrey,letterSpacing:1,textTransform:"uppercase",flexShrink:0}}>🏷️ Typ:</span>
             <button className="pill" style={{background:filterEventType==="all"?B.anthracite:B.offWhite,color:filterEventType==="all"?B.white:B.midGrey}} onClick={()=>setFilterEventType("all")}>Alle</button>
@@ -1102,15 +1122,28 @@ export default function TVHindelangApp() {
                   <div style={{fontSize:15,fontWeight:900,letterSpacing:1,textTransform:"uppercase"}}>Nachrichten</div>
                 </div>
                 <div style={{flex:1,overflow:"auto"}}>
-                  {threads.map(th=>{
-                    const last=th.messages?.slice(-1)[0]; const isActive=activeThread?.id===th.id;
+                  {visibleThreads.length === 0 && (
+                    <div style={{padding: 20, textAlign: "center", color: B.midGrey, fontSize: 13}}>Keine aktiven Chats.</div>
+                  )}
+                  {visibleThreads.map(th=>{
+                    const last=th.messages?.slice(-1)[0]; 
+                    const isActive=activeThread?.id===th.id;
+                    
+                    // DYNAMISCHER NAME FÜR DIREKTNACHRICHTEN
+                    let displayLabel = th.label;
+                    if (th.type === "direct") {
+                       const otherId = th.participants?.find(id => id !== user.uid) || user.uid;
+                       const otherUser = allUsers.find(u => u.id === otherId);
+                       displayLabel = otherUser ? (otherUser.name || otherUser.email) : "Benutzer";
+                    }
+
                     return (
                       <div key={th.id} style={{padding:"11px 14px",display:"flex",gap:10,alignItems:"center",cursor:"pointer",background:isActive?B.tealLight:"transparent",borderBottom:`1px solid ${B.lightGrey}`,transition:"background .15s"}} onClick={()=>setActiveThread(th)}>
                         <div style={{width:38,height:38,borderRadius:th.type==="group"?"10px":"50%",background:`linear-gradient(135deg,${B.teal},${B.tealDark})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,color:"white",fontWeight:800,flexShrink:0}}>
-                          {th.type==="group"?"👥":th.label?.slice(0,2).toUpperCase()}
+                          {th.type==="group"?"👥":displayLabel?.slice(0,2).toUpperCase()}
                         </div>
                         <div style={{flex:1,minWidth:0}}>
-                          <div style={{fontWeight:700,fontSize:14,color:isActive?B.teal:B.anthracite,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{th.label}</div>
+                          <div style={{fontWeight:700,fontSize:14,color:isActive?B.teal:B.anthracite,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{displayLabel}</div>
                           <div style={{fontSize:11,color:B.midGrey,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{last?`${last.from}: ${last.text}`:"Noch keine Nachrichten"}</div>
                         </div>
                       </div>
@@ -1131,7 +1164,11 @@ export default function TVHindelangApp() {
                         {activeThread.type==="group"?"👥":activeThread.label?.slice(0,2).toUpperCase()}
                       </div>
                       <div>
-                        <div style={{fontWeight:800,fontSize:15}}>{activeThread.label}</div>
+                        <div style={{fontWeight:800,fontSize:15}}>
+                          {activeThread.type === "direct" 
+                            ? (allUsers.find(u => u.id === (activeThread.participants?.find(id => id !== user.uid) || user.uid))?.name || "Benutzer")
+                            : activeThread.label}
+                        </div>
                         <div style={{fontSize:11,color:B.midGrey}}>{activeThread.type==="group"?`Gruppen-Chat · ${activeThread.team}`:"Direktnachricht"}</div>
                       </div>
                     </div>
@@ -1346,24 +1383,15 @@ export default function TVHindelangApp() {
         )}
       </main>
 
-      {/* ── MOBILE BOTTOM NAV ── */}
-      <nav className="bottom-nav">
-        {NAV.map(({id,icon,label})=>(
-          <button key={id} className={`bottom-nav-item ${view===id?"active":""}`} onClick={()=>{setView(id);setSelectedTeam(null); setActiveThread(null);}}>
-            <div className="bottom-nav-icon">{icon}</div>
-            {label}
-          </button>
-        ))}
-        {canAccessAdmin&&(
-          <button className={`bottom-nav-item ${view==="admin"?"active":""}`} onClick={()=>{
-            setView("admin");
-            if(isTrainer && !isAdmin && adminSection !== "events" && adminSection !== "news") setAdminSection("events");
-          }}>
-            <div className="bottom-nav-icon">⚙️</div>
-            Admin
-          </button>
-        )}
-      </nav>
+      {/* ── FOOTER ── */}
+      <footer style={{background:B.white,borderTop:`1.5px solid ${B.lightGrey}`,padding:"10px 24px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+        <div style={{fontSize:11,color:B.midGrey,fontWeight:600}}>© TV Hindelang Fussball</div>
+        <div style={{display:"flex",gap:20}}>
+          {[["Impressum","https://share.google/fPlP9Wjcsvyabws2C"],["Datenschutz","https://share.google/887uLP0KRXJTx68Ws"]].map(([label,url])=>(
+            <a key={label} href={url} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:B.midGrey,fontWeight:700,letterSpacing:1,textTransform:"uppercase",textDecoration:"none"}}>{label}</a>
+          ))}
+        </div>
+      </footer>
 
       {/* ════ EVENT MODAL ════ */}
       {showEventModal&&(
@@ -1592,21 +1620,17 @@ export default function TVHindelangApp() {
                   </select>
                 </div>
               : <div><label style={LBL}>Empfänger</label>
-                  {allUsers.length > 0 ? (
-                    <select className="input" value={newThreadName} onChange={e=>setNewThreadName(e.target.value)}>
-                      <option value="">Bitte wählen...</option>
-                      {allUsers.map(u => (
-                        <option key={u.id} value={u.name || u.email || `Benutzer (${u.id.substring(0,6)})`}>{u.name || u.email}</option>
-                      ))}
-                    </select>
-                  ) : (
-                    <div style={{fontSize:13, color:B.midGrey}}>Lade Benutzer...</div>
-                  )}
+                  <select className="input" value={newThreadRecipientId} onChange={e=>setNewThreadRecipientId(e.target.value)}>
+                    <option value="">Bitte wählen...</option>
+                    {allUsers.filter(u => u.id !== user?.uid).map(u => (
+                      <option key={u.id} value={u.id}>{u.name || u.email}</option>
+                    ))}
+                  </select>
                 </div>
             }
             <div style={{display:"flex",gap:10,marginTop:16}}>
               <button className="btn btn-ghost" style={{flex:1}} onClick={()=>setShowNewThread(false)}>Abbrechen</button>
-              <button className="btn btn-primary" style={{flex:2}} onClick={createThread} disabled={newThreadType==="group"?!newThreadTeam:!newThreadName.trim()}>Chat starten</button>
+              <button className="btn btn-primary" style={{flex:2}} onClick={createThread} disabled={newThreadType==="group"?!newThreadTeam:!newThreadRecipientId}>Chat starten</button>
             </div>
           </div>
         </div>
