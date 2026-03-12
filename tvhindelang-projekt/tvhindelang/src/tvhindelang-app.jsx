@@ -286,6 +286,7 @@ export default function TVHindelangApp() {
 
         if (!rawDate || !heim || !gast) continue; 
 
+        // DATUM BEREINIGEN
         let cleanDate = rawDate.replace(/^[a-zA-ZäöüßÄÖÜ]{2}\.?\s*/, ''); 
         let formattedDate = "";
         const deMatch = cleanDate.match(/(\d{1,2})\.(\d{1,2})\.?(\d{2,4})?/); 
@@ -301,6 +302,7 @@ export default function TVHindelangApp() {
         } else { continue; }
         if (isNaN(new Date(formattedDate).getTime())) continue;
 
+        // UHRZEIT BEREINIGEN
         let formattedTime = "12:00"; 
         if (rawTime) {
             let tClean = rawTime.replace(".", ":").trim();
@@ -308,11 +310,13 @@ export default function TVHindelangApp() {
             if (tMatch) formattedTime = `${tMatch[1].padStart(2, '0')}:${tMatch[2]}`;
         }
 
+        // ORT KOMBINIEREN
         let fullLocation = [spielstaette, ort].filter(Boolean).join(", ");
         if (!fullLocation) fullLocation = "Ort unbekannt";
 
+        // TITEL ERMITTELN
         let title = `${heim} vs. ${gast}`;
-        let teamName = mannschaftsart || "Verein"; 
+        let teamNameRaw = mannschaftsart || "Verein"; 
         
         if (heim.toLowerCase().includes("hindelang") || heim.toLowerCase().includes("tvh") || heim.toLowerCase().includes("tv ")) {
           title = `Heimspiel vs. ${gast}`;
@@ -320,6 +324,28 @@ export default function TVHindelangApp() {
           title = `Auswärts bei ${heim}`;
         }
 
+        // ─── SMART TEAM MAPPING (Jugend vs Junioren) ───
+        let finalTeamName = teamNameRaw;
+        let matchedTeam = teams.find(t => {
+          const eName = t.name.toLowerCase().trim();
+          const iName = teamNameRaw.toLowerCase().trim();
+          return eName === iName ||
+                 eName.replace("jugend", "junioren") === iName ||
+                 eName.replace("junioren", "jugend") === iName ||
+                 eName.replace("mädchen", "juniorinnen") === iName ||
+                 eName.replace("juniorinnen", "mädchen") === iName ||
+                 eName.replace("-", " ") === iName.replace("-", " ") ||
+                 eName.replace("-", "") === iName.replace("-", "");
+        });
+
+        if (matchedTeam) {
+          finalTeamName = matchedTeam.name; // Nutze den exakten Namen des manuell angelegten Teams!
+        } else {
+          // Fallback: Mache aus Junioren standardmäßig Jugend für eine saubere Optik
+          finalTeamName = teamNameRaw.replace(/Junioren/g, "Jugend").replace(/Juniorinnen/g, "Mädchen");
+        }
+
+        // ZUSATZINFOS BÜNDELN
         let extraInfos = [];
         if(typ) extraInfos.push(typ);
         if(staffel) extraInfos.push(`Staffel: ${staffel}`);
@@ -333,7 +359,7 @@ export default function TVHindelangApp() {
           endTime: "",
           location: fullLocation,
           notes: notesText,
-          team: teamName,
+          team: finalTeamName,
           bus1: false,
           bus2: false,
           declines: [],
@@ -1059,7 +1085,7 @@ export default function TVHindelangApp() {
         {view==="messages"&&(
           <div style={{maxWidth:1100,margin:"0 auto"}}>
             <div className="chat-layout">
-              <div className={`chat-sidebar ${activeThread ? 'mobile-hidden' : ''}`} style={{borderRight:`1.5px solid ${B.lightGrey}`,background:B.offWhite}}>
+              <div className={`chat-sidebar ${activeThread ? 'mobile-hidden' : ''}`} style={{borderRight:`1.5px solid ${B.lightGrey}`,background:B.offWhite, display: "flex", flexDirection: "column"}}>
                 <div style={{padding:"16px 14px",borderBottom:`1.5px solid ${B.lightGrey}`,background:B.white,flexShrink:0}}>
                   <div style={{fontSize:15,fontWeight:900,letterSpacing:1,textTransform:"uppercase"}}>Nachrichten</div>
                 </div>
@@ -1308,24 +1334,15 @@ export default function TVHindelangApp() {
         )}
       </main>
 
-      {/* ── MOBILE BOTTOM NAV ── */}
-      <nav className="bottom-nav">
-        {NAV.map(({id,icon,label})=>(
-          <button key={id} className={`bottom-nav-item ${view===id?"active":""}`} onClick={()=>{setView(id);setSelectedTeam(null); setActiveThread(null);}}>
-            <div className="bottom-nav-icon">{icon}</div>
-            {label}
-          </button>
-        ))}
-        {canAccessAdmin&&(
-          <button className={`bottom-nav-item ${view==="admin"?"active":""}`} onClick={()=>{
-            setView("admin");
-            if(isTrainer && !isAdmin && adminSection !== "events" && adminSection !== "news") setAdminSection("events");
-          }}>
-            <div className="bottom-nav-icon">⚙️</div>
-            Admin
-          </button>
-        )}
-      </nav>
+      {/* ── FOOTER ── */}
+      <footer style={{background:B.white,borderTop:`1.5px solid ${B.lightGrey}`,padding:"10px 24px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+        <div style={{fontSize:11,color:B.midGrey,fontWeight:600}}>© TV Hindelang Fussball</div>
+        <div style={{display:"flex",gap:20}}>
+          {[["Impressum","https://share.google/fPlP9Wjcsvyabws2C"],["Datenschutz","https://share.google/887uLP0KRXJTx68Ws"]].map(([label,url])=>(
+            <a key={label} href={url} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:B.midGrey,fontWeight:700,letterSpacing:1,textTransform:"uppercase",textDecoration:"none"}}>{label}</a>
+          ))}
+        </div>
+      </footer>
 
       {/* ════ EVENT MODAL ════ */}
       {showEventModal&&(
