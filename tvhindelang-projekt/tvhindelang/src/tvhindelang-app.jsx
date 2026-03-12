@@ -71,11 +71,12 @@ const Chip = ({ bg, c, border, children }) => (
   <span style={{display:"inline-block",padding:"2px 9px",borderRadius:20,fontSize:11,fontWeight:700,letterSpacing:.8,textTransform:"uppercase",background:bg,color:c,border:border||"none"}}>{children}</span>
 );
 
+// SICHERHEITS-HELFER (Verhindern Abstürze bei schmutzigen Datenbank-Einträgen)
 const getTrainerNames = (team) => {
-  if (team.trainers && team.trainers.length > 0) {
-    return team.trainers.map(tr => tr.name).filter(Boolean).join(", ") || "N.N.";
+  if (team?.trainers && Array.isArray(team.trainers) && team.trainers.length > 0) {
+    return team.trainers.map(tr => tr?.name ? String(tr.name) : "").filter(Boolean).join(", ") || "N.N.";
   }
-  return team.trainer || "N.N.";
+  return team?.trainer ? String(team.trainer) : "N.N.";
 };
 
 const safeDateObj = (dateString) => {
@@ -92,61 +93,6 @@ const safeDateObj = (dateString) => {
 const isImageFile = (filename) => {
   if (!filename || typeof filename !== 'string') return false;
   return /\.(jpg|jpeg|png|gif|webp)$/i.test(filename);
-};
-
-// ─── NEU: SPEICHERSCHONENDE KOMPRIMIERUNG ───
-const compressImage = (file, maxWidth = 1200, maxHeight = 1200, quality = 0.7) => {
-  return new Promise((resolve) => {
-    // 3-Sekunden Notfall-Timer verhindert, dass der Upload einfriert!
-    const fallbackTimer = setTimeout(() => {
-      resolve(file); 
-    }, 3000);
-
-    try {
-      const img = new Image();
-      const objectUrl = URL.createObjectURL(file); // Speicherschonender Trick
-
-      img.onload = () => {
-        URL.revokeObjectURL(objectUrl);
-        let width = img.width;
-        let height = img.height;
-
-        if (width > maxWidth || height > maxHeight) {
-          const ratio = Math.min(maxWidth / width, maxHeight / height);
-          width = width * ratio;
-          height = height * ratio;
-        }
-
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, width, height);
-
-        canvas.toBlob((blob) => {
-          clearTimeout(fallbackTimer);
-          if (blob) {
-            const newName = file.name.replace(/\.[^/.]+$/, ".jpg");
-            const compressedFile = new File([blob], newName, { type: 'image/jpeg', lastModified: Date.now() });
-            resolve(compressedFile);
-          } else {
-            resolve(file);
-          }
-        }, 'image/jpeg', quality);
-      };
-
-      img.onerror = () => {
-        clearTimeout(fallbackTimer);
-        URL.revokeObjectURL(objectUrl);
-        resolve(file);
-      };
-
-      img.src = objectUrl;
-    } catch (e) {
-      clearTimeout(fallbackTimer);
-      resolve(file);
-    }
-  });
 };
 
 // ─── MAIN ────────────────────────────────────────────────────
@@ -220,10 +166,12 @@ export default function TVHindelangApp() {
   const daysInMonth = new Date(year,month+1,0).getDate();
   const todayStr = new Date().toISOString().slice(0,10);
 
+  // KUGELSICHERE FILTER-LISTE
   const uniqueTeams = Array.from(new Set([
-    ...teams.map(t => t.name),
-    ...events.map(e => e.team).filter(Boolean)
-  ])).sort();
+    ...teams.map(t => t?.name ? String(t.name) : "").filter(Boolean),
+    ...events.map(e => e?.team ? String(e.team) : "").filter(Boolean)
+  ])).sort((a,b) => a.localeCompare(b));
+  
   const teamNames = ["Alle Mannschaften", ...uniqueTeams];
 
   useEffect(() => {
@@ -289,6 +237,7 @@ export default function TVHindelangApp() {
 
   const handleLogout = async () => { await signOut(auth); setView("home"); };
 
+  // ── CSV IMPORT LOGIK ────────────────────────
   const handleCSVUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -323,10 +272,10 @@ export default function TVHindelangApp() {
           else { current += char; }
         }
         result.push(current.trim());
-        return result.map(v => v.replace(/^"|"$/g, '').trim()); 
+        return result.map(v => String(v).replace(/^"|"$/g, '').trim()); 
       };
 
-      const headers = parseRow(lines[0]).map(h => h.toLowerCase());
+      const headers = parseRow(lines[0]).map(h => String(h).toLowerCase());
       let count = 0;
       
       for (let i = 1; i < lines.length; i++) {
@@ -351,7 +300,7 @@ export default function TVHindelangApp() {
 
         if (!rawDate || !heim || !gast) continue; 
 
-        let cleanDate = rawDate.replace(/^[a-zA-ZäöüßÄÖÜ]{2}\.?\s*/, ''); 
+        let cleanDate = String(rawDate).replace(/^[a-zA-ZäöüßÄÖÜ]{2}\.?\s*/, ''); 
         let formattedDate = "";
         const deMatch = cleanDate.match(/(\d{1,2})\.(\d{1,2})\.?(\d{2,4})?/); 
         const isoMatch = cleanDate.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);      
@@ -368,7 +317,7 @@ export default function TVHindelangApp() {
 
         let formattedTime = "12:00"; 
         if (rawTime) {
-            let tClean = rawTime.replace(".", ":").trim();
+            let tClean = String(rawTime).replace(".", ":").trim();
             const tMatch = tClean.match(/(\d{1,2}):(\d{2})/);
             if (tMatch) formattedTime = `${tMatch[1].padStart(2, '0')}:${tMatch[2]}`;
         }
@@ -377,18 +326,19 @@ export default function TVHindelangApp() {
         if (!fullLocation) fullLocation = "Ort unbekannt";
 
         let title = `${heim} vs. ${gast}`;
-        let teamNameRaw = mannschaftsart || "Verein"; 
+        let teamNameRaw = String(mannschaftsart || "Verein"); 
         
-        if (heim.toLowerCase().includes("hindelang") || heim.toLowerCase().includes("tvh") || heim.toLowerCase().includes("tv ")) {
+        if (String(heim).toLowerCase().includes("hindelang") || String(heim).toLowerCase().includes("tvh") || String(heim).toLowerCase().includes("tv ")) {
           title = `Heimspiel vs. ${gast}`;
-        } else if (gast.toLowerCase().includes("hindelang") || gast.toLowerCase().includes("tvh") || gast.toLowerCase().includes("tv ")) {
+        } else if (String(gast).toLowerCase().includes("hindelang") || String(gast).toLowerCase().includes("tvh") || String(gast).toLowerCase().includes("tv ")) {
           title = `Auswärts bei ${heim}`;
         }
 
         let finalTeamName = teamNameRaw;
         let matchedTeam = teams.find(t => {
-          const eName = t.name.toLowerCase().trim();
+          const eName = String(t?.name || "").toLowerCase().trim();
           const iName = teamNameRaw.toLowerCase().trim();
+          if (!eName) return false;
           return eName === iName ||
                  eName.replace("jugend", "junioren") === iName ||
                  eName.replace("junioren", "jugend") === iName ||
@@ -505,34 +455,20 @@ export default function TVHindelangApp() {
     if (!newsForm.title || !newsForm.body) return;
     setNewsSaving(true);
     let finalFileUrl = newsForm.fileUrl; let finalFileName = newsForm.fileName;
-    
     if (newsForm.fileObj) {
       try {
-        let fileToUpload = newsForm.fileObj;
-        
-        // KOMPRIMIERUNG HIER AUFRUFEN
-        if (isImageFile(fileToUpload.name)) {
-          fileToUpload = await compressImage(fileToUpload);
-        }
-
-        const fileRef = ref(storage, `news/${Date.now()}_${fileToUpload.name}`);
-        await uploadBytes(fileRef, fileToUpload);
-        finalFileUrl = await getDownloadURL(fileRef); 
-        finalFileName = fileToUpload.name;
-      } catch (err) { 
-        console.error("Upload Fehler:", err); 
-        alert("Fehler beim Hochladen.");
-      }
+        const fileRef = ref(storage, `news/${Date.now()}_${newsForm.fileObj.name}`);
+        await uploadBytes(fileRef, newsForm.fileObj);
+        finalFileUrl = await getDownloadURL(fileRef); finalFileName = newsForm.fileObj.name;
+      } catch (err) { console.error("Upload Fehler:", err); }
     }
-
     const newsData = { title: newsForm.title, body: newsForm.body, fileUrl: finalFileUrl, fileName: finalFileName };
     if (editingNews) {
       await updateDoc(doc(db,"news",editingNews.id), newsData);
     } else {
       await addDoc(collection(db,"news"), { ...newsData, date:todayStr, author: user?.email||"Admin", createdAt:serverTimestamp() });
     }
-    setNewsSaving(false); 
-    setShowNewsModal(false);
+    setNewsSaving(false); setShowNewsModal(false);
   };
 
   const deleteNews = async (id) => { 
@@ -550,7 +486,7 @@ export default function TVHindelangApp() {
   };
   const saveTeam = async () => {
     if (!teamForm.name) return;
-    const cleanTrainers = teamForm.trainers.filter(tr => tr.name.trim() !== "");
+    const cleanTrainers = teamForm.trainers.filter(tr => String(tr.name).trim() !== "");
     const finalData = { ...teamForm, trainers: cleanTrainers };
     if (editingTeam) await updateDoc(doc(db,"teams",editingTeam.id), finalData);
     else await addDoc(collection(db,"teams"), finalData);
@@ -600,7 +536,7 @@ export default function TVHindelangApp() {
 
   const openChat = async (th) => {
     setActiveThread(th);
-    if (user && th.id) {
+    if (user) {
       await updateDoc(doc(db, "threads", th.id), { [`readReceipts.${user.uid}`]: Date.now() });
     }
   };
@@ -672,16 +608,16 @@ export default function TVHindelangApp() {
   const totalUnreadCount = visibleThreads.filter(checkUnread).length;
 
   const matchesFilter = (ev) => {
-    const teamMatch = filterTeam === "Alle Mannschaften" || ev.team === filterTeam;
-    const typeMatch = filterEventType === "all" || ev.type === filterEventType;
+    const teamMatch = filterTeam === "Alle Mannschaften" || String(ev.team) === String(filterTeam);
+    const typeMatch = filterEventType === "all" || String(ev.type) === String(filterEventType);
     return teamMatch && typeMatch;
   };
   
   const getDay = (day) => { const d=`${year}-${String(month+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`; return events.filter(e=>e.date===d&&matchesFilter(e)); };
   const selectedStr = selectedDay ? `${year}-${String(month+1).padStart(2,"0")}-${String(selectedDay).padStart(2,"0")}` : "";
-  const selectedEvs = selectedDay ? events.filter(e=>e.date===selectedStr&&matchesFilter(e)).sort((a,b)=>(a.time||"").localeCompare(b.time||"")) : [];
-  const upcoming    = [...events].filter(e=>(e.date||"")>=todayStr&&matchesFilter(e)).sort((a,b)=>(a.date||"").localeCompare(b.date||"")||(a.time||"").localeCompare(b.time||"")).slice(0,10);
-  const nextThree   = [...events].filter(e=>(e.date||"")>=todayStr).sort((a,b)=>(a.date||"").localeCompare(b.date||"")||(a.time||"").localeCompare(b.time||"")).slice(0,3);
+  const selectedEvs = selectedDay ? events.filter(e=>e.date===selectedStr&&matchesFilter(e)).sort((a,b)=>String(a.time||"").localeCompare(String(b.time||""))) : [];
+  const upcoming    = [...events].filter(e=>(e.date||"")>=todayStr&&matchesFilter(e)).sort((a,b)=>String(a.date||"").localeCompare(String(b.date||""))||String(a.time||"").localeCompare(String(b.time||""))).slice(0,10);
+  const nextThree   = [...events].filter(e=>(e.date||"")>=todayStr).sort((a,b)=>String(a.date||"").localeCompare(String(b.date||""))||String(a.time||"").localeCompare(String(b.time||""))).slice(0,3);
 
   const NAV = [
     { id:"home",     icon:"🏠", label:"Start"        },
@@ -709,14 +645,14 @@ export default function TVHindelangApp() {
             <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:5}}>
               {isNew && <Chip bg={B.amberLight} c={B.amber}>NEU</Chip>}
               <Chip bg={t.color+"22"} c={t.color}>{t.label}</Chip>
-              {ev.team&&<Chip bg={B.anthracite+"11"} c={B.charcoal}>{ev.team}</Chip>}
+              {ev.team&&<Chip bg={B.anthracite+"11"} c={B.charcoal}>{String(ev.team)}</Chip>}
               {ev.bus1&&<Chip bg={BUS.bg} c={BUS.color} border={`1px solid ${BUS.border}`}>🚌 Bus 1</Chip>}
               {ev.bus2&&<Chip bg={BUS.bg} c={BUS.color} border={`1px solid ${BUS.border}`}>🚌 Bus 2</Chip>}
             </div>
-            <div style={{fontWeight:800,fontSize:15}}>{ev.title}</div>
-            <div style={{fontSize:13,color:B.teal,fontWeight:700,marginTop:2}}>⏰ {ev.time} {ev.endTime ? `- ${ev.endTime}` : ""} Uhr</div>
-            {ev.location&&<div style={{fontSize:12,color:B.midGrey,marginTop:1}}>📍 {ev.location}</div>}
-            {ev.notes&&<div style={{fontSize:12,color:B.charcoal,marginTop:4,fontStyle:"italic",fontFamily:"'Barlow',sans-serif"}}>{ev.notes}</div>}
+            <div style={{fontWeight:800,fontSize:15}}>{String(ev.title || "")}</div>
+            <div style={{fontSize:13,color:B.teal,fontWeight:700,marginTop:2}}>⏰ {String(ev.time || "")} {ev.endTime ? `- ${String(ev.endTime)}` : ""} Uhr</div>
+            {ev.location&&<div style={{fontSize:12,color:B.midGrey,marginTop:1}}>📍 {String(ev.location)}</div>}
+            {ev.notes&&<div style={{fontSize:12,color:B.charcoal,marginTop:4,fontStyle:"italic",fontFamily:"'Barlow',sans-serif"}}>{String(ev.notes)}</div>}
             
             {canEditEvents && Array.isArray(ev.declines) && ev.declines.length > 0 && (
               <div style={{marginTop: 8, padding: "6px 8px", background: B.redLight, borderRadius: 6, fontSize: 12, color: B.red, fontFamily:"'Barlow',sans-serif"}}>
@@ -744,6 +680,16 @@ export default function TVHindelangApp() {
         </div>
       </div>
     );
+  };
+
+  const getAdminTabs = () => {
+    const tabs = [];
+    if (isAdmin) tabs.push({ id: "teams", label: "👥 Mannschaften" });
+    if (canEditEvents) tabs.push({ id: "events", label: "📅 Termine" });
+    if (canEditNews) tabs.push({ id: "news", label: "📢 News" });
+    if (isAdmin) tabs.push({ id: "users", label: "👤 Benutzer" });
+    if (isAdmin) tabs.push({ id: "intro", label: "🏠 Startseite" });
+    return tabs;
   };
 
   if (authLoading) return (
@@ -971,7 +917,7 @@ export default function TVHindelangApp() {
                   <div style={{fontSize:30,fontWeight:900,letterSpacing:2,textTransform:"uppercase",lineHeight:1.1}}>TV Hindelang Fussball</div>
                 </div>
               </div>
-              <p style={{fontFamily:"'Barlow',sans-serif",fontSize:15,lineHeight:1.65,opacity:.92,maxWidth:580}}>{introText}</p>
+              <p style={{fontFamily:"'Barlow',sans-serif",fontSize:15,lineHeight:1.65,opacity:.92,maxWidth:580}}>{String(introText || "")}</p>
             </div>
             <div className="grid-2">
               <div className="tile" onClick={()=>setView("calendar")}>
@@ -990,8 +936,8 @@ export default function TVHindelangApp() {
                             <div style={{fontSize:10,color:B.midGrey,fontWeight:700}}>{sd.month}</div>
                           </div>
                           <div style={{flex:1,minWidth:0}}>
-                            <div style={{fontWeight:800,fontSize:14,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{ev.title}</div>
-                            <div style={{fontSize:11,color:B.midGrey}}>⏰ {ev.time} {ev.endTime ? `- ${ev.endTime}` : ""} · {ev.team}</div>
+                            <div style={{fontWeight:800,fontSize:14,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{String(ev.title || "")}</div>
+                            <div style={{fontSize:11,color:B.midGrey}}>⏰ {String(ev.time || "")} {ev.endTime ? `- ${String(ev.endTime)}` : ""} · {String(ev.team || "")}</div>
                           </div>
                         </div>
                       );
@@ -1003,7 +949,7 @@ export default function TVHindelangApp() {
                   <span style={{fontSize:13,fontWeight:800,letterSpacing:1.5,textTransform:"uppercase",color:B.red}}>📋 Spielplan</span>
                   <span style={{fontSize:11,color:B.midGrey,fontWeight:600}}>Alle Spiele →</span>
                 </div>
-                {events.filter(e=>e.type==="game"&&(e.date||"")>=todayStr).sort((a,b)=>(a.date||"").localeCompare(b.date||"")).slice(0,3).map(ev=>{
+                {events.filter(e=>e.type==="game"&&(e.date||"")>=todayStr).sort((a,b)=>String(a.date||"").localeCompare(String(b.date||""))).slice(0,3).map(ev=>{
                   const sd=safeDateObj(ev.date);
                   return (
                     <div key={ev.id} style={{display:"flex",gap:10,alignItems:"center",padding:"9px 11px",background:B.redLight,borderRadius:8}}>
@@ -1012,8 +958,8 @@ export default function TVHindelangApp() {
                         <div style={{fontSize:10,color:B.red,fontWeight:700,opacity:.7}}>{sd.month}</div>
                       </div>
                       <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontWeight:800,fontSize:13,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{ev.title}</div>
-                        <div style={{fontSize:11,color:B.midGrey}}>{ev.team} · {ev.time} {ev.endTime ? `- ${ev.endTime}` : ""} Uhr</div>
+                        <div style={{fontWeight:800,fontSize:13,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{String(ev.title || "")}</div>
+                        <div style={{fontSize:11,color:B.midGrey}}>{String(ev.team || "")} · {String(ev.time || "")} {ev.endTime ? `- ${String(ev.endTime)}` : ""} Uhr</div>
                       </div>
                     </div>
                   );
@@ -1025,7 +971,7 @@ export default function TVHindelangApp() {
                   <span style={{fontSize:11,color:B.midGrey,fontWeight:600}}>Übersicht →</span>
                 </div>
                 <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
-                  {teams.map(t=><span key={t.id} style={{display:"inline-block",padding:"2px 9px",borderRadius:20,fontSize:11,fontWeight:700,background:B.tealLight,color:B.teal}}>{t.name}</span>)}
+                  {teams.map(t=><span key={t.id} style={{display:"inline-block",padding:"2px 9px",borderRadius:20,fontSize:11,fontWeight:700,background:B.tealLight,color:B.teal}}>{String(t.name || "")}</span>)}
                 </div>
                 <div style={{fontSize:13,color:B.midGrey,fontFamily:"'Barlow',sans-serif"}}>{teams.length} aktive Mannschaften</div>
               </div>
@@ -1036,20 +982,20 @@ export default function TVHindelangApp() {
                 </div>
                 {news.slice(0,2).map(n=>(
                   <div key={n.id} style={{padding:"10px 12px",background:B.amberLight,borderRadius:8,borderLeft:`3px solid ${B.amber}`}}>
-                    <div style={{fontWeight:800,fontSize:14,marginBottom:3}}>{n.title}</div>
-                    <div style={{fontSize:12,color:B.charcoal,fontFamily:"'Barlow',sans-serif",lineHeight:1.5}}>{n.body?.slice(0,90)}{(n.body?.length||0)>90?"…":""}</div>
+                    <div style={{fontWeight:800,fontSize:14,marginBottom:3}}>{String(n.title || "")}</div>
+                    <div style={{fontSize:12,color:B.charcoal,fontFamily:"'Barlow',sans-serif",lineHeight:1.5}}>{String(n.body || "").slice(0,90)}{(String(n.body||"").length)>90?"…":""}</div>
                     
                     {n.fileUrl && isImageFile(n.fileName) ? (
-                      <a href={n.fileUrl} target="_blank" rel="noopener noreferrer" style={{display:"block", marginTop:8, marginBottom:6}}>
-                        <img src={n.fileUrl} alt="Anhang" style={{maxWidth:"100%", maxHeight:120, objectFit:"cover", borderRadius:6, border:`1px solid ${B.lightGrey}`}} />
+                      <a href={n.fileUrl} target="_blank" rel="noopener noreferrer" style={{display:"block", marginTop:8}}>
+                        <img src={n.fileUrl} alt="News Anhang" style={{width:"100%", maxHeight:160, objectFit:"cover", borderRadius:6, border:`1px solid ${B.lightGrey}`}} />
                       </a>
                     ) : n.fileUrl ? (
-                      <a href={n.fileUrl} target="_blank" rel="noopener noreferrer" style={{display:"inline-block", marginBottom:6, fontSize:12, fontWeight:700, color:B.amber, textDecoration:"none", borderBottom:`1px solid ${B.amber}`}}>
-                        📎 {n.fileName || "Anhang öffnen"}
+                      <a href={n.fileUrl} target="_blank" rel="noopener noreferrer" style={{display:"inline-block", marginTop:6, fontSize:11, fontWeight:700, color:B.amber, textDecoration:"none", borderBottom:`1px solid ${B.amber}`}}>
+                        📎 {String(n.fileName || "Anhang öffnen")}
                       </a>
                     ) : null}
-
-                    <div style={{fontSize:10,color:B.midGrey,marginTop:6,fontWeight:600}}>{n.date} · {n.author}</div>
+                    
+                    <div style={{fontSize:10,color:B.midGrey,marginTop:6,fontWeight:600}}>{String(n.date || "")} · {String(n.author || "")}</div>
                   </div>
                 ))}
               </div>
@@ -1081,7 +1027,7 @@ export default function TVHindelangApp() {
                   return (
                     <div key={day} className={`cal-day ${isToday?"today":""} ${isSel?"selected":""}`} onClick={()=>setSelectedDay(day===selectedDay?null:day)}>
                       <div style={{fontSize:12,fontWeight:700,color:isToday||isSel?B.teal:B.charcoal,marginBottom:2}}>{day}</div>
-                      {dayEvs.slice(0,3).map(ev=><div key={ev.id} className="event-bar" style={{background:(ev.bus1||ev.bus2)?BUS.color:typeOf(ev.type).color}} title={ev.title}/>)}
+                      {dayEvs.slice(0,3).map(ev=><div key={ev.id} className="event-bar" style={{background:(ev.bus1||ev.bus2)?BUS.color:typeOf(ev.type).color}} title={String(ev.title||"")}/>)}
                       {dayEvs.length>3&&<div style={{fontSize:9,color:B.midGrey,fontWeight:700}}>+{dayEvs.length-3}</div>}
                     </div>
                   );
@@ -1138,14 +1084,14 @@ export default function TVHindelangApp() {
                         <div style={{width:3,background:hasBus?BUS.color:t.color,borderRadius:2,alignSelf:"stretch"}}/>
                         <div style={{flex: 1}}>
                           <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3,flexWrap:"wrap"}}>
-                            <span style={{fontWeight:800,fontSize:16}}>{ev.title}</span>
+                            <span style={{fontWeight:800,fontSize:16}}>{String(ev.title || "")}</span>
                             <Chip bg={t.bg} c={t.color}>{t.label}</Chip>
-                            {ev.team&&<Chip bg={B.anthracite+"11"} c={B.charcoal}>{ev.team}</Chip>}
+                            {ev.team&&<Chip bg={B.anthracite+"11"} c={B.charcoal}>{String(ev.team)}</Chip>}
                             {ev.bus1&&<Chip bg={BUS.bg} c={BUS.color} border={`1px solid ${BUS.border}`}>🚌 Bus 1</Chip>}
                             {ev.bus2&&<Chip bg={BUS.bg} c={BUS.color} border={`1px solid ${BUS.border}`}>🚌 Bus 2</Chip>}
                           </div>
-                          <div style={{color:B.midGrey,fontSize:12}}>⏰ {ev.time} {ev.endTime ? `- ${ev.endTime}` : ""} Uhr · 📍 {ev.location}</div>
-                          {ev.notes&&<div style={{fontSize:12,color:B.charcoal,marginTop:2,fontStyle:"italic",fontFamily:"'Barlow',sans-serif"}}>{ev.notes}</div>}
+                          <div style={{color:B.midGrey,fontSize:12}}>⏰ {String(ev.time || "")} {ev.endTime ? `- ${String(ev.endTime)}` : ""} Uhr · 📍 {String(ev.location || "")}</div>
+                          {ev.notes&&<div style={{fontSize:12,color:B.charcoal,marginTop:2,fontStyle:"italic",fontFamily:"'Barlow',sans-serif"}}>{String(ev.notes)}</div>}
                           
                           {canEditEvents && Array.isArray(ev.declines) && ev.declines.length > 0 && (
                             <div style={{marginTop: 6, fontSize: 12, color: B.red, fontFamily:"'Barlow',sans-serif"}}>
@@ -1175,11 +1121,11 @@ export default function TVHindelangApp() {
               {teams.map(ti=>(
                 <div key={ti.id} className="team-card" onClick={()=>setSelectedTeam(ti)}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
-                    <div style={{fontSize:22,fontWeight:900,letterSpacing:1}}>{ti.name}</div>
-                    <span style={{display:"inline-block",padding:"2px 9px",borderRadius:20,fontSize:11,fontWeight:700,background:B.tealLight,color:B.teal}}>{ti.jahrgang}</span>
+                    <div style={{fontSize:22,fontWeight:900,letterSpacing:1}}>{String(ti.name || "")}</div>
+                    <span style={{display:"inline-block",padding:"2px 9px",borderRadius:20,fontSize:11,fontWeight:700,background:B.tealLight,color:B.teal}}>{String(ti.jahrgang || "")}</span>
                   </div>
-                  <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif",marginBottom:4}}>👤 <strong>Trainer:</strong> {getTrainerNames(ti)}</div>
-                  <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif"}}>⏰ {ti.training}</div>
+                  <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif",marginBottom:4}}>👤 <strong>Trainer:</strong> {String(getTrainerNames(ti))}</div>
+                  <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif"}}>⏰ {String(ti.training || "")}</div>
                   <div style={{marginTop:12,fontSize:11,color:B.teal,fontWeight:700}}>Details →</div>
                 </div>
               ))}
@@ -1192,8 +1138,8 @@ export default function TVHindelangApp() {
             <div className="card" style={{padding:"28px 32px"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:24}}>
                 <div>
-                  <div style={{fontSize:32,fontWeight:900,letterSpacing:2,textTransform:"uppercase"}}>{selectedTeam.name}</div>
-                  <span style={{display:"inline-block",padding:"2px 9px",borderRadius:20,fontSize:11,fontWeight:700,background:B.tealLight,color:B.teal,marginTop:6}}>{selectedTeam.jahrgang}</span>
+                  <div style={{fontSize:32,fontWeight:900,letterSpacing:2,textTransform:"uppercase"}}>{String(selectedTeam.name || "")}</div>
+                  <span style={{display:"inline-block",padding:"2px 9px",borderRadius:20,fontSize:11,fontWeight:700,background:B.tealLight,color:B.teal,marginTop:6}}>{String(selectedTeam.jahrgang || "")}</span>
                 </div>
                 {isAdmin&&<button className="btn btn-edit" onClick={()=>openEditTeam(selectedTeam)}>✏️ Bearbeiten</button>}
               </div>
@@ -1205,21 +1151,21 @@ export default function TVHindelangApp() {
                   {selectedTeam.trainers && Array.isArray(selectedTeam.trainers) && selectedTeam.trainers.length > 0 ? (
                     selectedTeam.trainers.map((tr, idx) => (
                       <div key={idx} style={{marginBottom: idx === selectedTeam.trainers.length - 1 ? 0 : 10}}>
-                        <div style={{fontSize:15,fontWeight:700,fontFamily:"'Barlow',sans-serif"}}>{tr.name || "N.N."}</div>
-                        {tr.phone && (
+                        <div style={{fontSize:15,fontWeight:700,fontFamily:"'Barlow',sans-serif"}}>{String(tr?.name || "N.N.")}</div>
+                        {tr?.phone && (
                           <div style={{fontSize:13,fontFamily:"'Barlow',sans-serif",marginTop:2}}>
-                            📞 <a href={`tel:${tr.phone}`} style={{color:B.teal,textDecoration:"none",fontWeight:500}}>{tr.phone}</a>
+                            📞 <a href={`tel:${tr.phone}`} style={{color:B.teal,textDecoration:"none",fontWeight:500}}>{String(tr.phone)}</a>
                           </div>
                         )}
                       </div>
                     ))
                   ) : (
-                    <div style={{fontSize:15,fontWeight:700,fontFamily:"'Barlow',sans-serif"}}>{selectedTeam.trainer || 'N.N.'}</div>
+                    <div style={{fontSize:15,fontWeight:700,fontFamily:"'Barlow',sans-serif"}}>{String(selectedTeam.trainer || 'N.N.')}</div>
                   )}
                 </div>
               </div>
 
-              {[{icon:"⏰",label:"Trainingszeiten",val:selectedTeam.training},{icon:"🎂",label:"Jahrgang",val:selectedTeam.jahrgang}].map(row=>(
+              {[{icon:"⏰",label:"Trainingszeiten",val:String(selectedTeam.training || "")},{icon:"🎂",label:"Jahrgang",val:String(selectedTeam.jahrgang || "")}].map(row=>(
                 <div key={row.label} style={{display:"flex",gap:16,alignItems:"center",padding:"14px 0",borderBottom:`1px solid ${B.lightGrey}`}}>
                   <div style={{width:36,height:36,borderRadius:"50%",background:B.tealLight,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>{row.icon}</div>
                   <div>
@@ -1231,7 +1177,7 @@ export default function TVHindelangApp() {
 
               <div style={{marginTop:20}}>
                 <div style={{fontSize:12,fontWeight:700,letterSpacing:1,color:B.midGrey,textTransform:"uppercase",marginBottom:10}}>Nächste Termine</div>
-                {events.filter(e=>e.team===selectedTeam.name&&(e.date||"")>=todayStr).sort((a,b)=>(a.date||"").localeCompare(b.date||"")).slice(0,4).map(ev=><EventCard key={ev.id} ev={ev} controls={false}/>)}
+                {events.filter(e=>e.team===selectedTeam.name&&(e.date||"")>=todayStr).sort((a,b)=>String(a.date||"").localeCompare(String(b.date||""))).slice(0,4).map(ev=><EventCard key={ev.id} ev={ev} controls={false}/>)}
                 {events.filter(e=>e.team===selectedTeam.name&&(e.date||"")>=todayStr).length===0&&<div style={{fontSize:13,color:B.midGrey,fontFamily:"'Barlow',sans-serif"}}>Keine kommenden Termine</div>}
               </div>
             </div>
@@ -1255,22 +1201,22 @@ export default function TVHindelangApp() {
                     const isActive=activeThread?.id===th.id;
                     const isUnread = checkUnread(th);
                     
-                    let displayLabel = th.label;
+                    let displayLabel = String(th.label || "");
                     if (th.type === "direct") {
                        const otherId = Array.isArray(th.participants) ? (th.participants.find(id => id !== user.uid) || user.uid) : user.uid;
                        const otherUser = allUsers.find(u => u.id === otherId);
-                       displayLabel = otherUser ? (otherUser.name || otherUser.email) : "Benutzer";
+                       displayLabel = otherUser ? String(otherUser.name || otherUser.email) : "Benutzer";
                     }
 
                     return (
                       <div key={th.id} style={{padding:"11px 14px",display:"flex",gap:10,alignItems:"center",cursor:"pointer",background:isActive?B.tealLight:"transparent",borderBottom:`1px solid ${B.lightGrey}`,transition:"background .15s"}} onClick={()=>openChat(th)}>
                         <div style={{width:38,height:38,borderRadius:th.type==="group"?"10px":"50%",background:`linear-gradient(135deg,${B.teal},${B.tealDark})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,color:"white",fontWeight:800,flexShrink:0}}>
-                          {th.type==="group"?"👥":displayLabel?.slice(0,2).toUpperCase()}
+                          {th.type==="group"?"👥":String(displayLabel||"").slice(0,2).toUpperCase()}
                         </div>
                         <div style={{flex:1,minWidth:0}}>
                           <div style={{fontWeight:isUnread?900:700,fontSize:14,color:isActive?B.teal:B.anthracite,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{displayLabel}</div>
                           <div style={{fontSize:11,color:isUnread?B.anthracite:B.midGrey,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",fontWeight:isUnread?700:400}}>
-                            {last ? `${last.from}: ${last.text}` : "Noch keine Nachrichten"}
+                            {last ? `${String(last.from)}: ${String(last.text)}` : "Noch keine Nachrichten"}
                           </div>
                         </div>
                         {isUnread && <div className="unread-dot" />}
@@ -1289,15 +1235,15 @@ export default function TVHindelangApp() {
                     <div style={{padding:"14px 20px",borderBottom:`1.5px solid ${B.lightGrey}`,display:"flex",alignItems:"center",gap:12,background:B.white,flexShrink:0}}>
                       <button className="mobile-back-btn" onClick={() => setActiveThread(null)}>←</button>
                       <div style={{width:38,height:38,borderRadius:activeThread.type==="group"?"10px":"50%",background:`linear-gradient(135deg,${B.teal},${B.tealDark})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,color:"white",fontWeight:800}}>
-                        {activeThread.type==="group"?"👥":activeThread.label?.slice(0,2).toUpperCase()}
+                        {activeThread.type==="group"?"👥":String(activeThread.label||"").slice(0,2).toUpperCase()}
                       </div>
                       <div>
                         <div style={{fontWeight:800,fontSize:15}}>
                           {activeThread.type === "direct" 
-                            ? (allUsers.find(u => u.id === (Array.isArray(activeThread.participants) ? activeThread.participants.find(id => id !== user.uid) : user.uid))?.name || "Benutzer")
-                            : activeThread.label}
+                            ? String(allUsers.find(u => u.id === (Array.isArray(activeThread.participants) ? activeThread.participants.find(id => id !== user.uid) : user.uid))?.name || "Benutzer")
+                            : String(activeThread.label || "")}
                         </div>
-                        <div style={{fontSize:11,color:B.midGrey}}>{activeThread.type==="group"?`Gruppen-Chat · ${activeThread.team}`:"Direktnachricht"}</div>
+                        <div style={{fontSize:11,color:B.midGrey}}>{activeThread.type==="group"?`Gruppen-Chat · ${String(activeThread.team || "")}`:"Direktnachricht"}</div>
                       </div>
                     </div>
                     <div style={{flex:1,overflow:"auto",padding:20,display:"flex",flexDirection:"column",gap:10,background:B.offWhite}}>
@@ -1307,9 +1253,9 @@ export default function TVHindelangApp() {
                         const isMe = msg.from === (myProfile?.name || user.email);
                         return (
                           <div key={i} style={{display:"flex",flexDirection:"column",alignItems:isMe?"flex-end":"flex-start"}}>
-                            {!isMe&&<div style={{fontSize:11,color:B.midGrey,marginBottom:2,fontWeight:600}}>{msg.from}</div>}
-                            <div className={isMe?"chat-me":"chat-them"}>{msg.text}</div>
-                            <div style={{fontSize:10,color:B.midGrey,marginTop:3}}>{msg.time}</div>
+                            {!isMe&&<div style={{fontSize:11,color:B.midGrey,marginBottom:2,fontWeight:600}}>{String(msg.from || "")}</div>}
+                            <div className={isMe?"chat-me":"chat-them"}>{String(msg.text || "")}</div>
+                            <div style={{fontSize:10,color:B.midGrey,marginTop:3}}>{String(msg.time || "")}</div>
                           </div>
                         );
                       })}
@@ -1340,7 +1286,7 @@ export default function TVHindelangApp() {
                 <h1 style={{fontSize:28,fontWeight:900,letterSpacing:2,textTransform:"uppercase",color:isAdmin?B.amber:B.teal}}>
                   {isAdmin ? "Admin-Bereich" : "Trainer-Bereich"}
                 </h1>
-                <div style={{fontSize:12,color:B.midGrey}}>Eingeloggt als: {user?.email}</div>
+                <div style={{fontSize:12,color:B.midGrey}}>Eingeloggt als: {String(user?.email || "")}</div>
               </div>
             </div>
             
@@ -1362,10 +1308,10 @@ export default function TVHindelangApp() {
                   {teams.length === 0 && <div style={{color:B.midGrey, fontSize:14}}>Keine Mannschaften gefunden. Leg eine neue an!</div>}
                   {teams.map(t=>(
                     <div key={t.id} className="card admin-list-item">
-                      <div style={{fontWeight:800,fontSize:16}}>{t.name}</div>
-                      <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif"}}>👤 {getTrainerNames(t)}</div>
-                      <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif"}}>⏰ {t.training}</div>
-                      <div style={{fontSize:13,color:B.midGrey,fontFamily:"'Barlow',sans-serif"}}>🎂 {t.jahrgang}</div>
+                      <div style={{fontWeight:800,fontSize:16}}>{String(t.name || "Unbenannt")}</div>
+                      <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif"}}>👤 {String(getTrainerNames(t))}</div>
+                      <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif"}}>⏰ {String(t.training || "Keine Zeit")}</div>
+                      <div style={{fontSize:13,color:B.midGrey,fontFamily:"'Barlow',sans-serif"}}>🎂 {String(t.jahrgang || "Kein Jahrgang")}</div>
                       <div className="admin-list-actions">
                         <button className="btn btn-edit" onClick={()=>openEditTeam(t)}>✏️</button>
                         <button className="btn btn-danger" onClick={()=>deleteTeam(t.id)}>🗑️</button>
@@ -1391,7 +1337,7 @@ export default function TVHindelangApp() {
                   
                 </div>
                 <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                  {[...events].sort((a,b)=>(a.date||"").localeCompare(b.date||"")).map(ev=>{
+                  {[...events].sort((a,b)=>String(a.date||"").localeCompare(String(b.date||""))).map(ev=>{
                     const t=typeOf(ev.type); const sd = safeDateObj(ev.date);
                     return (
                       <div key={ev.id} className="card schedule-grid">
@@ -1402,11 +1348,11 @@ export default function TVHindelangApp() {
                         <div style={{width:3,background:t.color,borderRadius:2,alignSelf:"stretch"}}/>
                         <div>
                           <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:3}}>
-                            <span style={{fontWeight:800,fontSize:14}}>{ev.title}</span>
-                            <Chip bg={t.bg} c={t.color}>{t.label}</Chip>
-                            <Chip bg={B.anthracite+"11"} c={B.charcoal}>{ev.team}</Chip>
+                            <span style={{fontWeight:800,fontSize:14}}>{String(ev.title || "Ohne Titel")}</span>
+                            <Chip bg={t.bg} c={t.color}>{String(t.label || "")}</Chip>
+                            <Chip bg={B.anthracite+"11"} c={B.charcoal}>{String(ev.team || "Kein Team")}</Chip>
                           </div>
-                          <div style={{fontSize:12,color:B.midGrey}}>⏰ {ev.time} {ev.endTime ? `- ${ev.endTime}` : ""} · 📍 {ev.location}</div>
+                          <div style={{fontSize:12,color:B.midGrey}}>⏰ {String(ev.time || "")} {ev.endTime ? `- ${String(ev.endTime)}` : ""} · 📍 {String(ev.location || "Ohne Ort")}</div>
                         </div>
                         <div className="schedule-actions">
                           <button className="btn btn-edit" style={{background:"#25D366", color:"white"}} onClick={()=>shareEventWhatsApp(ev)} title="In WhatsApp teilen">📲 WA</button>
@@ -1431,8 +1377,8 @@ export default function TVHindelangApp() {
                     <div key={n.id} className="card" style={{padding:"16px 20px",borderLeft:`3px solid ${B.amber}`}}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12}} className="event-card-inner">
                         <div style={{flex:1}}>
-                          <div style={{fontWeight:800,fontSize:16,marginBottom:4}}>{n.title}</div>
-                          <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif",lineHeight:1.5,marginBottom:6}}>{n.body}</div>
+                          <div style={{fontWeight:800,fontSize:16,marginBottom:4}}>{String(n.title || "Ohne Titel")}</div>
+                          <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif",lineHeight:1.5,marginBottom:6}}>{String(n.body || "")}</div>
                           
                           {n.fileUrl && isImageFile(n.fileName) ? (
                             <a href={n.fileUrl} target="_blank" rel="noopener noreferrer" style={{display:"block", marginTop:8, marginBottom:6}}>
@@ -1440,11 +1386,11 @@ export default function TVHindelangApp() {
                             </a>
                           ) : n.fileUrl ? (
                             <a href={n.fileUrl} target="_blank" rel="noopener noreferrer" style={{display:"inline-block", marginBottom:6, fontSize:12, fontWeight:700, color:B.amber, textDecoration:"none", borderBottom:`1px solid ${B.amber}`}}>
-                              📎 {n.fileName || "Anhang öffnen"}
+                              📎 {String(n.fileName || "Anhang öffnen")}
                             </a>
                           ) : null}
 
-                          <div style={{fontSize:11,color:B.midGrey,fontWeight:600}}>{n.date} · {n.author}</div>
+                          <div style={{fontSize:11,color:B.midGrey,fontWeight:600}}>{String(n.date || "")} · {String(n.author || "")}</div>
                         </div>
                         <div className="event-card-actions">
                           <button className="btn btn-edit" style={{background:"#25D366", color:"white"}} onClick={()=>shareNewsWhatsApp(n)} title="In WhatsApp teilen">📲 WA</button>
@@ -1484,12 +1430,12 @@ export default function TVHindelangApp() {
                     return (
                       <div key={u.id} className="card admin-list-item" style={{gridTemplateColumns:"1fr 1fr auto auto"}}>
                         <div style={{fontWeight:800,fontSize:16}}>
-                          {u.name || <span style={{color:B.midGrey,fontStyle:"italic"}}>Kein Name</span>}
-                          {Array.isArray(u.assignedTeams) && u.assignedTeams.length > 0 && <div style={{fontSize:11, color:B.midGrey, marginTop:2}}>Zugeordnet: {u.assignedTeams.join(", ")}</div>}
+                          {u.name ? String(u.name) : <span style={{color:B.midGrey,fontStyle:"italic"}}>Kein Name</span>}
+                          {Array.isArray(u.assignedTeams) && u.assignedTeams.length > 0 && <div style={{fontSize:11, color:B.midGrey, marginTop:2}}>Zugeordnet: {u.assignedTeams.map(x=>String(x)).join(", ")}</div>}
                         </div>
-                        <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif", overflow:"hidden", textOverflow:"ellipsis"}}>✉️ {u.email || u.id}</div>
+                        <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif", overflow:"hidden", textOverflow:"ellipsis"}}>✉️ {String(u.email || u.id || "")}</div>
                         <div>
-                          <Chip bg={rc.bg} c={rc.c}>{getRoleLabel(u.role)}</Chip>
+                          <Chip bg={rc.bg} c={rc.c}>{String(getRoleLabel(u.role))}</Chip>
                         </div>
                         <div className="admin-list-actions">
                           <button className="btn btn-edit" onClick={()=>openEditUser(u)}>✏️ Bearbeiten</button>
@@ -1507,10 +1453,10 @@ export default function TVHindelangApp() {
                 <div style={{fontSize:16,fontWeight:800,letterSpacing:1,textTransform:"uppercase",marginBottom:16}}>Vorstellungstext Startseite</div>
                 <div className="card" style={{padding:24}}>
                   <label style={LBL}>Text bearbeiten</label>
-                  <textarea className="input" value={introText} onChange={e=>setIntroText(e.target.value)} style={{minHeight:140,marginBottom:16}}/>
+                  <textarea className="input" value={introText || ""} onChange={e=>setIntroText(e.target.value)} style={{minHeight:140,marginBottom:16}}/>
                   <div style={{padding:"12px 16px",background:B.tealLight,borderRadius:8,borderLeft:`3px solid ${B.teal}`,marginBottom:16}}>
                     <div style={{fontSize:11,fontWeight:700,color:B.teal,letterSpacing:1,marginBottom:4}}>VORSCHAU</div>
-                    <p style={{fontFamily:"'Barlow',sans-serif",fontSize:14,lineHeight:1.6,color:B.charcoal}}>{introText}</p>
+                    <p style={{fontFamily:"'Barlow',sans-serif",fontSize:14,lineHeight:1.6,color:B.charcoal}}>{String(introText || "")}</p>
                   </div>
                   <button className="btn btn-primary" style={{width:"100%"}} onClick={()=>saveIntro(introText)}>💾 Speichern</button>
                 </div>
