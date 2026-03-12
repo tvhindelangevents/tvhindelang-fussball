@@ -1069,6 +1069,18 @@ export default function TVHindelangApp() {
             )}
           </div>
         )}
+
+        {/* ── FOOTER ── */}
+        <div style={{ textAlign: "center", padding: "60px 24px 20px", marginTop: "auto" }}>
+          <div style={{ display: "flex", justifyContent: "center", gap: 20, fontSize: 12, fontWeight: 700, color: B.midGrey, textTransform: "uppercase", letterSpacing: 1 }}>
+            <a href="https://www.tvhindelang.de/impressum" target="_blank" rel="noopener noreferrer" style={{ color: B.midGrey, textDecoration: "none" }}>Impressum</a>
+            <a href="https://www.tvhindelang.de/datenschutzerklaerung" target="_blank" rel="noopener noreferrer" style={{ color: B.midGrey, textDecoration: "none" }}>Datenschutz</a>
+          </div>
+          <div style={{ fontSize: 11, color: B.midGrey, marginTop: 12, fontFamily: "'Barlow', sans-serif" }}>
+            © {new Date().getFullYear()} TV Hindelang e.V. Fussball
+          </div>
+        </div>
+        
       </main>
 
       {/* ── MOBILE BOTTOM NAV ── */}
