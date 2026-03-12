@@ -134,11 +134,11 @@ export default function TVHindelangApp() {
   const [showNewThread, setShowNewThread]   = useState(false);
   const [newThreadType, setNewThreadType]   = useState("group");
   const [newThreadTeam, setNewThreadTeam]   = useState("Herren");
-  const [newThreadRecipientId, setNewThreadRecipientId] = useState(""); // NEU: ID statt Name
+  const [newThreadRecipientId, setNewThreadRecipientId] = useState(""); 
 
   const [showUserModal, setShowUserModal]   = useState(false);
   const [editingUser, setEditingUser]       = useState(null);
-  const [userForm, setUserForm]             = useState({ name: "", email: "", password: "", role: "player" });
+  const [userForm, setUserForm]             = useState({ name: "", email: "", password: "", role: "player", assignedTeams: [] });
   const [userSaving, setUserSaving]         = useState(false);
   const [userError, setUserError]           = useState("");
 
@@ -211,7 +211,13 @@ export default function TVHindelangApp() {
     if (!registerName.trim()) { setLoginError("Bitte gib deinen Namen an."); setLoginLoading(false); return; }
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, loginEmail, loginPassword);
-      await setDoc(doc(db, "users", userCredential.user.uid), { email: loginEmail, name: registerName, role: "player", createdAt: serverTimestamp() });
+      await setDoc(doc(db, "users", userCredential.user.uid), { 
+        email: loginEmail, 
+        name: registerName, 
+        role: "player", 
+        assignedTeams: [],
+        createdAt: serverTimestamp() 
+      });
       setLoginEmail(""); setLoginPassword(""); setRegisterName("");
     } catch (e) {
       if (e.code === 'auth/email-already-in-use') setLoginError("Diese E-Mail ist bereits registriert.");
@@ -223,6 +229,7 @@ export default function TVHindelangApp() {
 
   const handleLogout = async () => { await signOut(auth); setView("home"); };
 
+  // ── CSV IMPORT LOGIK ────────────────────────
   const handleCSVUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -475,17 +482,28 @@ export default function TVHindelangApp() {
     if (window.confirm("Möchtest du diese Mannschaft wirklich löschen?")) { await deleteDoc(doc(db,"teams",id)); }
   };
 
-  const openAddUser = () => { setEditingUser(null); setUserError(""); setUserForm({ name: "", email: "", password: "", role: "player" }); setShowUserModal(true); };
-  const openEditUser = (u) => { setEditingUser(u); setUserError(""); setUserForm({ name: u.name || "", email: u.email || "", password: "", role: u.role || "player" }); setShowUserModal(true); };
+  const openAddUser = () => { 
+    setEditingUser(null); 
+    setUserError(""); 
+    setUserForm({ name: "", email: "", password: "", role: "player", assignedTeams: [] }); 
+    setShowUserModal(true); 
+  };
+  const openEditUser = (u) => { 
+    setEditingUser(u); 
+    setUserError(""); 
+    setUserForm({ name: u.name || "", email: u.email || "", password: "", role: u.role || "player", assignedTeams: u.assignedTeams || [] }); 
+    setShowUserModal(true); 
+  };
   const saveUser = async () => {
     setUserError(""); setUserSaving(true);
     try {
-      if (editingUser) { await updateDoc(doc(db, "users", editingUser.id), { name: userForm.name, role: userForm.role }); } 
-      else {
+      if (editingUser) { 
+        await updateDoc(doc(db, "users", editingUser.id), { name: userForm.name, role: userForm.role, assignedTeams: userForm.assignedTeams }); 
+      } else {
         if (!userForm.email || !userForm.password) { setUserError("E-Mail und Passwort sind Pflichtfelder für neue Nutzer."); setUserSaving(false); return; }
         const userCredential = await createUserWithEmailAndPassword(secondaryAuth, userForm.email, userForm.password);
         const newUid = userCredential.user.uid;
-        await setDoc(doc(db, "users", newUid), { email: userForm.email, name: userForm.name, role: userForm.role, createdAt: serverTimestamp() });
+        await setDoc(doc(db, "users", newUid), { email: userForm.email, name: userForm.name, role: userForm.role, assignedTeams: userForm.assignedTeams, createdAt: serverTimestamp() });
         await signOut(secondaryAuth);
       }
       setShowUserModal(false);
@@ -502,14 +520,33 @@ export default function TVHindelangApp() {
 
   const saveIntro = async (text) => { await setDoc(doc(db,"settings","intro"), { text }); };
 
-  // ── NEUE CHAT LOGIK (DATENSCHUTZ) ──
+  // ── NEUE CHAT & BENACHRICHTIGUNGS-LOGIK ──
+  const openChat = async (th) => {
+    setActiveThread(th);
+    if (user) {
+      // Setze Zeitstempel für "Gelesen" beim Öffnen
+      await updateDoc(doc(db, "threads", th.id), { [`readReceipts.${user.uid}`]: Date.now() });
+    }
+  };
+
   const sendMessage = async () => {
     if (!chatInput.trim()||!activeThread) return;
     const myProfile = allUsers.find(u => u.id === user.uid);
     const senderName = myProfile?.name || user.email;
-    const msg = { from: senderName, text:chatInput, time: new Date().toLocaleTimeString("de",{hour:"2-digit",minute:"2-digit"}) };
+    const msg = { 
+      from: senderName, 
+      text: chatInput, 
+      time: new Date().toLocaleTimeString("de",{hour:"2-digit",minute:"2-digit"}),
+      timestamp: Date.now() // NEU: Zeitstempel für rote Punkte
+    };
     const updated = [...(activeThread.messages||[]), msg];
-    await updateDoc(doc(db,"threads",activeThread.id), { messages: updated });
+    
+    // Nachricht abspeichern UND direkt für mich als gelesen markieren
+    await updateDoc(doc(db,"threads",activeThread.id), { 
+      messages: updated,
+      [`readReceipts.${user.uid}`]: Date.now() 
+    });
+    
     setActiveThread({...activeThread, messages: updated});
     setChatInput("");
   };
@@ -519,14 +556,13 @@ export default function TVHindelangApp() {
       const ref = await addDoc(collection(db,"threads"), { type:"group", label:newThreadTeam, team:newThreadTeam, messages:[] });
       setActiveThread({ id:ref.id, type:"group", label:newThreadTeam, team:newThreadTeam, messages:[] });
     } else {
-      // Prüfen, ob der Chat bereits existiert, um Duplikate zu vermeiden
       const existing = threads.find(th => th.type === "direct" && th.participants?.includes(user.uid) && th.participants?.includes(newThreadRecipientId));
       if (existing) {
-        setActiveThread(existing);
+        openChat(existing);
       } else {
         const ref = await addDoc(collection(db,"threads"), { 
           type:"direct", 
-          participants: [user.uid, newThreadRecipientId], // Speichert die IDs privat
+          participants: [user.uid, newThreadRecipientId],
           messages:[] 
         });
         setActiveThread({ id:ref.id, type:"direct", participants: [user.uid, newThreadRecipientId], messages:[] });
@@ -536,12 +572,29 @@ export default function TVHindelangApp() {
     setNewThreadRecipientId("");
   };
 
-  // Chat-Liste filtern: Jeder sieht alle Gruppen, aber bei "direct" nur Chats, wo die eigene ID drinsteht.
+  // CHECK: Welche Chats darf dieser User sehen?
   const visibleThreads = threads.filter(th => {
-    if (th.type === "group") return true; 
+    if (th.type === "group") {
+      if (isAdmin) return true; // Admins sehen alle Gruppen
+      const myProfile = allUsers.find(u => u.id === user?.uid);
+      const myTeams = myProfile?.assignedTeams || [];
+      return myTeams.includes(th.team); // User sieht nur Gruppen seiner zugeteilten Teams
+    }
     if (th.type === "direct") return th.participants?.includes(user?.uid);
     return false;
   });
+
+  // CHECK: Hat irgendein Chat eine ungelesene Nachricht?
+  const checkUnread = (th) => {
+    if (!th.messages || th.messages.length === 0) return false;
+    const lastMsg = th.messages[th.messages.length - 1];
+    const myProfile = allUsers.find(u => u.id === user?.uid);
+    if (lastMsg.from === (myProfile?.name || user?.email)) return false; // Meine eigenen Nachrichten sind nicht "ungelesen"
+    if (!lastMsg.timestamp) return false; // Ignoriere ganz alte Test-Nachrichten ohne Zeitstempel
+    const myLastRead = th.readReceipts?.[user?.uid] || 0;
+    return lastMsg.timestamp > myLastRead;
+  };
+  const totalUnreadCount = visibleThreads.filter(checkUnread).length;
 
   const matchesFilter = (ev) => {
     const teamMatch = filterTeam === "Alle Mannschaften" || ev.team === filterTeam;
@@ -560,7 +613,7 @@ export default function TVHindelangApp() {
     { id:"calendar", icon:"📅", label:"Kalender"     },
     { id:"schedule", icon:"📋", label:"Spielplan"    },
     { id:"teams",    icon:"👥", label:"Teams"        },
-    { id:"messages", icon:"💬", label:"Chats"        },
+    { id:"messages", icon:"💬", label:"Chats", badge: totalUnreadCount > 0 },
   ];
 
   const EventCard = ({ ev, controls=true }) => {
@@ -686,11 +739,10 @@ export default function TVHindelangApp() {
         .app-container { display: flex; flex-direction: column; min-height: 100vh; min-height: 100dvh; }
         .main-wrapper { flex: 1; overflow-y: auto; padding: 28px 24px; }
         
-        /* Unsichtbare, aber nutzbare Scrollbars für sauberes Wischen */
         .hide-scroll { overflow-x: auto; -ms-overflow-style: none; scrollbar-width: none; }
         .hide-scroll::-webkit-scrollbar { display: none; }
         
-        .nav-btn { background:none;border:none;cursor:pointer;padding:13px 15px;color:${B.midGrey};font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;border-bottom:3px solid transparent;transition:all .2s;display:flex;align-items:center;gap:6px;white-space:nowrap; }
+        .nav-btn { position:relative; background:none;border:none;cursor:pointer;padding:13px 15px;color:${B.midGrey};font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;border-bottom:3px solid transparent;transition:all .2s;display:flex;align-items:center;gap:6px;white-space:nowrap; }
         .nav-btn:hover { color:${B.teal}; } .nav-btn.active { color:${B.teal};border-bottom-color:${B.teal}; }
         
         .btn { border:none;border-radius:7px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:1px;text-transform:uppercase;transition:all .18s; }
@@ -719,12 +771,12 @@ export default function TVHindelangApp() {
         
         .chat-me { background:${B.teal};color:white;border-radius:14px 14px 2px 14px;padding:9px 14px;max-width:78%;align-self:flex-end;font-size:14px;font-family:'Barlow',sans-serif; }
         .chat-them { background:${B.white};border:1.5px solid ${B.lightGrey};border-radius:14px 14px 14px 2px;padding:9px 14px;max-width:78%;align-self:flex-start;font-size:14px;font-family:'Barlow',sans-serif; }
+        .unread-dot { width: 10px; height: 10px; background: ${B.red}; border-radius: 50%; display: inline-block; flex-shrink: 0; }
         
         .pill { border:none;border-radius:20px;padding:6px 14px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:.8px;text-transform:uppercase;white-space:nowrap;transition:all .15s; flex-shrink: 0;}
         .admin-tab { background:none;border:none;border-bottom:2px solid transparent;padding:10px 18px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:1px;text-transform:uppercase;color:${B.midGrey};transition:all .2s; white-space: nowrap;}
         .admin-tab:hover { color:${B.amber}; } .admin-tab.active{color:${B.amber};border-bottom-color:${B.amber};}
         
-        /* ── GRIDS & LAYOUTS ── */
         .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
         .cal-layout { display: grid; grid-template-columns: 1fr 320px; gap: 24px; max-width: 1200px; margin: 0 auto; }
         .schedule-grid { display: grid; grid-template-columns: 64px 3px 1fr auto; gap: 14px; align-items: center; padding: 14px 18px; transition: border-color .2s; }
@@ -734,16 +786,16 @@ export default function TVHindelangApp() {
         .bottom-nav { display: none; }
         .mobile-back-btn { display: none; }
         
-        /* ── MOBILE RESPONSIVENESS ── */
         @media (max-width: 768px) {
           .main-wrapper { padding: 16px 16px 100px 16px; }
           .top-nav-links { display: none !important; }
           .header-right { margin-left: auto; }
           
           .bottom-nav { display: flex !important; position: fixed; bottom: 0; left: 0; width: 100%; background: ${B.white}; border-top: 1.5px solid ${B.lightGrey}; z-index: 9999; padding-bottom: max(12px, env(safe-area-inset-bottom)); justify-content: space-around; box-shadow: 0 -4px 20px rgba(0,0,0,0.08); }
-          .bottom-nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px 0 8px 0; color: ${B.midGrey}; font-family: 'Barlow Condensed', sans-serif; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; border: none; background: none; cursor: pointer; transition: color .2s;}
+          .bottom-nav-item { position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px 0 8px 0; color: ${B.midGrey}; font-family: 'Barlow Condensed', sans-serif; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; border: none; background: none; cursor: pointer; transition: color .2s;}
           .bottom-nav-item.active { color: ${B.teal}; }
           .bottom-nav-icon { font-size: 22px; margin-bottom: 2px; }
+          .nav-badge-mobile { position: absolute; top: 6px; right: calc(50% - 14px); background: ${B.red}; width: 8px; height: 8px; border-radius: 50%; }
           
           .grid-2 { grid-template-columns: 1fr; }
           .cal-layout { grid-template-columns: 1fr; gap: 16px; }
@@ -782,9 +834,10 @@ export default function TVHindelangApp() {
         </div>
         
         <nav className="top-nav-links" style={{display:"flex",alignItems:"center"}}>
-          {NAV.map(({id,icon,label})=>(
+          {NAV.map(({id,icon,label,badge})=>(
             <button key={id} className={`nav-btn ${view===id?"active":""}`} onClick={()=>{setView(id);setSelectedTeam(null);}}>
               <span>{icon}</span>{label}
+              {badge && <div style={{position:"absolute", top: 12, right: 6, background: B.red, width: 8, height: 8, borderRadius: "50%"}} />}
             </button>
           ))}
           <div style={{width:1,height:28,background:B.lightGrey,margin:"0 8px"}}/>
@@ -803,7 +856,6 @@ export default function TVHindelangApp() {
       {/* ── FILTER & LEGENDE BAR (DYNAMIC) ── */}
       {(view==="calendar"||view==="schedule")&&(
         <div style={{background:B.white,borderBottom:`1.5px solid ${B.lightGrey}`,flexShrink:0}}>
-          
           {/* 1. Team Filter Row */}
           <div className="hide-scroll" style={{padding:"10px 24px",display:"flex",alignItems:"center",gap:10, borderBottom:`1px dashed ${B.lightGrey}`}}>
             <span style={{fontSize:12,fontWeight:800,color:B.midGrey,letterSpacing:1,textTransform:"uppercase",flexShrink:0}}>👥 Team:</span>
@@ -811,7 +863,6 @@ export default function TVHindelangApp() {
               <button key={t} className="pill" style={{background:filterTeam===t?B.teal:B.offWhite,color:filterTeam===t?B.white:B.midGrey}} onClick={()=>setFilterTeam(t)}>{t}</button>
             ))}
           </div>
-
           {/* 2. Typ Filter Row */}
           <div className="hide-scroll" style={{padding:"10px 24px",display:"flex",alignItems:"center",gap:10, borderBottom:`1px dashed ${B.lightGrey}`}}>
             <span style={{fontSize:12,fontWeight:800,color:B.midGrey,letterSpacing:1,textTransform:"uppercase",flexShrink:0}}>🏷️ Typ:</span>
@@ -820,7 +871,6 @@ export default function TVHindelangApp() {
               <button key={t.value} className="pill" style={{background:filterEventType===t.value?t.color:B.offWhite,color:filterEventType===t.value?B.white:B.midGrey}} onClick={()=>setFilterEventType(t.value)}>{t.label}</button>
             ))}
           </div>
-
           {/* 3. Legend Row */}
           <div className="hide-scroll" style={{padding:"8px 24px",display:"flex",alignItems:"center",gap:16}}>
             <span style={{fontSize:11,fontWeight:800,color:B.midGrey,letterSpacing:1,textTransform:"uppercase",flexShrink:0}}>🎨 Legende:</span>
@@ -833,7 +883,6 @@ export default function TVHindelangApp() {
               <div style={{width:12,height:12,borderRadius:3,background:BUS.color}}/>🚌 Bus
             </div>
           </div>
-
         </div>
       )}
 
@@ -1128,8 +1177,8 @@ export default function TVHindelangApp() {
                   {visibleThreads.map(th=>{
                     const last=th.messages?.slice(-1)[0]; 
                     const isActive=activeThread?.id===th.id;
+                    const isUnread = checkUnread(th);
                     
-                    // DYNAMISCHER NAME FÜR DIREKTNACHRICHTEN
                     let displayLabel = th.label;
                     if (th.type === "direct") {
                        const otherId = th.participants?.find(id => id !== user.uid) || user.uid;
@@ -1138,14 +1187,17 @@ export default function TVHindelangApp() {
                     }
 
                     return (
-                      <div key={th.id} style={{padding:"11px 14px",display:"flex",gap:10,alignItems:"center",cursor:"pointer",background:isActive?B.tealLight:"transparent",borderBottom:`1px solid ${B.lightGrey}`,transition:"background .15s"}} onClick={()=>setActiveThread(th)}>
+                      <div key={th.id} style={{padding:"11px 14px",display:"flex",gap:10,alignItems:"center",cursor:"pointer",background:isActive?B.tealLight:"transparent",borderBottom:`1px solid ${B.lightGrey}`,transition:"background .15s"}} onClick={()=>openChat(th)}>
                         <div style={{width:38,height:38,borderRadius:th.type==="group"?"10px":"50%",background:`linear-gradient(135deg,${B.teal},${B.tealDark})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,color:"white",fontWeight:800,flexShrink:0}}>
                           {th.type==="group"?"👥":displayLabel?.slice(0,2).toUpperCase()}
                         </div>
                         <div style={{flex:1,minWidth:0}}>
-                          <div style={{fontWeight:700,fontSize:14,color:isActive?B.teal:B.anthracite,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{displayLabel}</div>
-                          <div style={{fontSize:11,color:B.midGrey,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{last?`${last.from}: ${last.text}`:"Noch keine Nachrichten"}</div>
+                          <div style={{fontWeight:isUnread?900:700,fontSize:14,color:isActive?B.teal:B.anthracite,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{displayLabel}</div>
+                          <div style={{fontSize:11,color:isUnread?B.anthracite:B.midGrey,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",fontWeight:isUnread?700:400}}>
+                            {last?`${last.from}: ${last.text}`:"Noch keine Nachrichten"}
+                          </div>
                         </div>
+                        {isUnread && <div className="unread-dot" />}
                       </div>
                     );
                   })}
@@ -1349,13 +1401,16 @@ export default function TVHindelangApp() {
                     
                     return (
                       <div key={u.id} className="card admin-list-item" style={{gridTemplateColumns:"1fr 1fr auto auto"}}>
-                        <div style={{fontWeight:800,fontSize:16}}>{u.name || <span style={{color:B.midGrey,fontStyle:"italic"}}>Kein Name</span>}</div>
+                        <div style={{fontWeight:800,fontSize:16}}>
+                          {u.name || <span style={{color:B.midGrey,fontStyle:"italic"}}>Kein Name</span>}
+                          {u.assignedTeams?.length > 0 && <div style={{fontSize:11, color:B.midGrey, marginTop:2}}>Zugeordnet: {u.assignedTeams.join(", ")}</div>}
+                        </div>
                         <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif", overflow:"hidden", textOverflow:"ellipsis"}}>✉️ {u.email || u.id}</div>
                         <div>
                           <Chip bg={rc.bg} c={rc.c}>{getRoleLabel(u.role)}</Chip>
                         </div>
                         <div className="admin-list-actions">
-                          <button className="btn btn-edit" onClick={()=>openEditUser(u)}>✏️</button>
+                          <button className="btn btn-edit" onClick={()=>openEditUser(u)}>✏️ Bearbeiten</button>
                           <button className="btn btn-danger" onClick={()=>deleteUser(u.id)}>🗑️</button>
                         </div>
                       </div>
@@ -1383,15 +1438,27 @@ export default function TVHindelangApp() {
         )}
       </main>
 
-      {/* ── FOOTER ── */}
-      <footer style={{background:B.white,borderTop:`1.5px solid ${B.lightGrey}`,padding:"10px 24px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
-        <div style={{fontSize:11,color:B.midGrey,fontWeight:600}}>© TV Hindelang Fussball</div>
-        <div style={{display:"flex",gap:20}}>
-          {[["Impressum","https://share.google/fPlP9Wjcsvyabws2C"],["Datenschutz","https://share.google/887uLP0KRXJTx68Ws"]].map(([label,url])=>(
-            <a key={label} href={url} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:B.midGrey,fontWeight:700,letterSpacing:1,textTransform:"uppercase",textDecoration:"none"}}>{label}</a>
-          ))}
-        </div>
-      </footer>
+      {/* ── MOBILE BOTTOM NAV ── */}
+      <nav className="bottom-nav">
+        {NAV.map(({id,icon,label,badge})=>(
+          <button key={id} className={`bottom-nav-item ${view===id?"active":""}`} onClick={()=>{setView(id);setSelectedTeam(null); setActiveThread(null);}}>
+            <div className="bottom-nav-icon" style={{position:"relative"}}>
+              {icon}
+              {badge && <div className="nav-badge-mobile" />}
+            </div>
+            {label}
+          </button>
+        ))}
+        {canAccessAdmin&&(
+          <button className={`bottom-nav-item ${view==="admin"?"active":""}`} onClick={()=>{
+            setView("admin");
+            if(isTrainer && !isAdmin && adminSection !== "events" && adminSection !== "news") setAdminSection("events");
+          }}>
+            <div className="bottom-nav-icon">⚙️</div>
+            Admin
+          </button>
+        )}
+      </nav>
 
       {/* ════ EVENT MODAL ════ */}
       {showEventModal&&(
@@ -1566,27 +1633,49 @@ export default function TVHindelangApp() {
       {/* ════ USER MODAL ════ */}
       {showUserModal&&(
         <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&setShowUserModal(false)}>
-          <div className="modal" style={{maxWidth:420}}>
+          <div className="modal" style={{maxWidth:460}}>
             <div style={{height:4,background:`linear-gradient(90deg,${B.amber},${B.teal})`,borderRadius:"4px 4px 0 0",margin:"-30px -30px 22px"}}/>
             <h2 style={{fontSize:22,fontWeight:900,letterSpacing:1,textTransform:"uppercase",marginBottom:20}}>
               {editingUser ? "Benutzer bearbeiten" : "Neuen Benutzer anlegen"}
             </h2>
             <div style={{display:"flex",flexDirection:"column",gap:13}}>
               {!editingUser && (
-                <>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
                   <div><label style={LBL}>E-Mail *</label><input className="input" type="email" placeholder="spieler@email.de" value={userForm.email} onChange={e=>setUserForm({...userForm,email:e.target.value})}/></div>
-                  <div><label style={LBL}>Passwort *</label><input className="input" type="password" placeholder="Mindestens 6 Zeichen" value={userForm.password} onChange={e=>setUserForm({...userForm,password:e.target.value})}/></div>
-                </>
+                  <div><label style={LBL}>Passwort *</label><input className="input" type="password" placeholder="Mind. 6 Zeichen" value={userForm.password} onChange={e=>setUserForm({...userForm,password:e.target.value})}/></div>
+                </div>
               )}
-              <div><label style={LBL}>Anzeigename</label><input className="input" placeholder="z.B. Max Mustermann" value={userForm.name} onChange={e=>setUserForm({...userForm,name:e.target.value})}/></div>
-              <div><label style={LBL}>Rolle</label>
-                <select className="input" value={userForm.role} onChange={e=>setUserForm({...userForm,role:e.target.value})}>
-                  <option value="admin">Administrator</option>
-                  <option value="trainer">Trainer</option>
-                  <option value="player">Aktiv (Spieler:in)</option>
-                  <option value="parent">Eltern</option>
-                </select>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                <div><label style={LBL}>Anzeigename</label><input className="input" placeholder="z.B. Max Mustermann" value={userForm.name} onChange={e=>setUserForm({...userForm,name:e.target.value})}/></div>
+                <div><label style={LBL}>Rolle</label>
+                  <select className="input" value={userForm.role} onChange={e=>setUserForm({...userForm,role:e.target.value})}>
+                    <option value="admin">Administrator</option>
+                    <option value="trainer">Trainer</option>
+                    <option value="player">Aktiv (Spieler:in)</option>
+                    <option value="parent">Eltern</option>
+                  </select>
+                </div>
               </div>
+
+              {/* TEAM ZUWEISUNG */}
+              <div style={{marginTop: 4}}>
+                <label style={LBL}>Zugeordnete Mannschaften (Für Gruppen-Chats)</label>
+                <div style={{display:"flex", flexWrap:"wrap", gap:8, marginTop: 6}}>
+                  {uniqueTeams.filter(t => t !== "Alle Mannschaften").map(tName => (
+                    <label key={tName} style={{display:"flex", alignItems:"center", gap:6, fontSize:13, background: userForm.assignedTeams.includes(tName) ? B.tealLight : B.offWhite, padding: "8px 12px", borderRadius: 8, border: `1.5px solid ${userForm.assignedTeams.includes(tName) ? B.teal : B.lightGrey}`, cursor:"pointer", transition:"all .2s"}}>
+                      <input type="checkbox" style={{width: 16, height: 16}} checked={userForm.assignedTeams.includes(tName)} 
+                        onChange={e => {
+                          if(e.target.checked) setUserForm({...userForm, assignedTeams: [...userForm.assignedTeams, tName]});
+                          else setUserForm({...userForm, assignedTeams: userForm.assignedTeams.filter(name => name !== tName)});
+                        }} 
+                      />
+                      {tName}
+                    </label>
+                  ))}
+                  {uniqueTeams.length === 0 && <div style={{fontSize:12, color:B.midGrey}}>Lege zuerst Teams an oder importiere Spiele.</div>}
+                </div>
+              </div>
+
               {userError && <div style={{color:B.red,fontSize:13,fontFamily:"'Barlow',sans-serif",marginTop:4}}>❌ {userError}</div>}
               <div style={{display:"flex",gap:10,marginTop:12}}>
                 <button className="btn btn-ghost" style={{flex:1}} onClick={()=>setShowUserModal(false)} disabled={userSaving}>Abbrechen</button>
