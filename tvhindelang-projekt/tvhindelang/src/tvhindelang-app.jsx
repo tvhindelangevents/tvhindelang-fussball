@@ -740,12 +740,26 @@ const EventCard = ({ ev, controls=true, showDate=false, onClick=null }) => {
               <p style={{fontFamily:"'Barlow',sans-serif",fontSize:15,lineHeight:1.65,opacity:.92,maxWidth:580}}>{safeStr(introText)}</p>
             </div>
             <div className="grid-2">
-              <div className="tile" onClick={()=>setView("calendar")}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontSize:13,fontWeight:800,letterSpacing:1.5,textTransform:"uppercase",color:B.teal}}>📅 Nächste Termine</span><span style={{fontSize:11,color:B.midGrey,fontWeight:600}}>Kalender →</span></div>
+             <div className="tile" style={{cursor: "default"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center", cursor: "pointer"}} onClick={()=>setView("calendar")}>
+                  <span style={{fontSize:13,fontWeight:800,letterSpacing:1.5,textTransform:"uppercase",color:B.teal}}>📅 Nächste Termine</span>
+                  <span style={{fontSize:11,color:B.midGrey,fontWeight:600}}>Kalender →</span>
+                </div>
                 {nextThree.length===0 ? <div style={{fontSize:13,color:B.midGrey,fontFamily:"'Barlow',sans-serif"}}>Keine kommenden Termine</div> : nextThree.map(ev=>{
                   if (!ev) return null; const t=typeOf(ev.type); const sd=safeDateObj(ev.date); const hasBus=ev.bus1||ev.bus2;
                   return (
-                    <div key={ev.id || Math.random()} style={{display:"flex",gap:12,alignItems:"center",padding:"9px 11px",background:B.offWhite,borderRadius:8,borderLeft:`3px solid ${hasBus?BUS.color:t.color}`}}>
+                    <div 
+                      key={ev.id || Math.random()} 
+                      style={{display:"flex",gap:12,alignItems:"center",padding:"9px 11px",background:B.offWhite,borderRadius:8,borderLeft:`3px solid ${hasBus?BUS.color:t.color}`, cursor: "pointer"}}
+                      onClick={() => {
+                        const d = new Date(ev.date);
+                        if (!isNaN(d.getTime())) {
+                          setCurrentDate(new Date(d.getFullYear(), d.getMonth(), 1)); // Setzt den richtigen Monat
+                          setSelectedDay(d.getDate()); // Wählt den richtigen Tag aus
+                          setView("calendar"); // Wechselt zum Kalender
+                        }
+                      }}
+                    >
                       <div style={{textAlign:"center",minWidth:30,flexShrink:0}}><div style={{fontSize:19,fontWeight:900,color:hasBus?BUS.color:t.color,lineHeight:1}}>{sd.day}</div><div style={{fontSize:10,color:B.midGrey,fontWeight:700}}>{sd.month}</div></div>
                       <div style={{flex:1,minWidth:0}}><div style={{fontWeight:800,fontSize:14,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{safeStr(ev.title)}</div><div style={{fontSize:11,color:B.midGrey}}>⏰ {safeStr(ev.time)} {ev.endTime ? `- ${safeStr(ev.endTime)}` : ""} · {safeStr(ev.team)}</div></div>
                     </div>
