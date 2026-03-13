@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getFirestore, collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, onSnapshot, setDoc, serverTimestamp, query, orderBy } from "firebase/firestore";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword } from "firebase/auth";
+import { Analytics } from '@vercel/analytics/react';
 
 // ─── FIREBASE ────────────────────────────────────────────────
 const firebaseConfig = {
@@ -1311,6 +1312,20 @@ const EventCard = ({ ev, controls=true, showDate=false, onClick=null }) => {
           </div>
         </div>
       )}
+      <div style={{display:"flex",gap:10,marginTop:16}}>
+              <button className="btn btn-ghost" style={{flex:1}} onClick={()=>setShowNewThread(false)}>Abbrechen</button>
+              <button className="btn btn-primary" style={{flex:2}} onClick={createThread} disabled={newThreadType==="group"?!newThreadTeam:!newThreadRecipientId}>Chat starten</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── UNSICHTBARER VERCEL ZÄHLER ── */}
+      <Analytics />
+
+    </div>
+  );
+}
     </div>
   );
 }
