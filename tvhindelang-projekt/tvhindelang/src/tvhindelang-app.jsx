@@ -498,7 +498,7 @@ export default function TVHindelangApp() {
     { id:"messages", icon:"💬", label:"Chats", badge: totalUnreadCount > 0 },
   ];
 
-  const EventCard = ({ ev, controls=true }) => {
+const EventCard = ({ ev, controls=true, showDate=false, onClick=null }) => {
     if (!ev) return null;
     const t=typeOf(ev.type); const hasBus=ev.bus1||ev.bus2;
     const myProfile = allUsers.find(u => u.id === user?.uid); const myName = myProfile?.name || user?.email;
@@ -506,9 +506,13 @@ export default function TVHindelangApp() {
     const isNew = ev.createdAt?.toDate ? ev.createdAt.toDate() > new Date(Date.now() - 48 * 60 * 60 * 1000) : false;
     const myTeams = Array.isArray(myProfile?.assignedTeams) ? myProfile.assignedTeams : [];
     const canDecline = isAdmin || isTrainer || myTeams.includes(ev.team);
+    const sd = safeDateObj(ev.date); // Holt das formatierte Datum
 
     return (
-      <div style={{borderLeft:`3px solid ${hasBus?BUS.color:t.color}`,background:hasBus?BUS.bg:t.bg,borderRadius:"0 8px 8px 0",padding:"11px 13px",marginBottom:10}}>
+      <div 
+        style={{borderLeft:`3px solid ${hasBus?BUS.color:t.color}`,background:hasBus?BUS.bg:t.bg,borderRadius:"0 8px 8px 0",padding:"11px 13px",marginBottom:10, cursor: onClick ? "pointer" : "default", transition: "transform .15s"}}
+        onClick={onClick ? () => onClick(ev) : undefined}
+      >
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}} className="event-card-inner">
           <div style={{flex:1,minWidth:0}}>
             <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:5}}>
@@ -519,7 +523,10 @@ export default function TVHindelangApp() {
               {ev.bus2&&<Chip bg={BUS.bg} c={BUS.color} border={`1px solid ${BUS.border}`}>🚌 Bus 2</Chip>}
             </div>
             <div style={{fontWeight:800,fontSize:15}}>{safeStr(ev.title)}</div>
-            <div style={{fontSize:13,color:B.teal,fontWeight:700,marginTop:2}}>⏰ {safeStr(ev.time)} {ev.endTime ? `- ${safeStr(ev.endTime)}` : ""} Uhr</div>
+            <div style={{fontSize:13,color:B.teal,fontWeight:700,marginTop:2}}>
+              {showDate && <span>📅 {sd.day}. {sd.month} {sd.year} · </span>}
+              ⏰ {safeStr(ev.time)} {ev.endTime ? `- ${safeStr(ev.endTime)}` : ""} Uhr
+            </div>
             {ev.location&&<div style={{fontSize:12,color:B.midGrey,marginTop:1}}>📍 {safeStr(ev.location)}</div>}
             {ev.notes&&<div style={{fontSize:12,color:B.charcoal,marginTop:4,fontStyle:"italic",fontFamily:"'Barlow',sans-serif"}}>{safeStr(ev.notes)}</div>}
             {canEditEvents && Array.isArray(ev.declines) && ev.declines.length > 0 && (
@@ -887,9 +894,25 @@ export default function TVHindelangApp() {
                   <div><div style={{fontSize:11,fontWeight:700,letterSpacing:1,color:B.midGrey,textTransform:"uppercase"}}>{row.label}</div><div style={{fontSize:15,fontWeight:700,marginTop:1,fontFamily:"'Barlow',sans-serif"}}>{row.val}</div></div>
                 </div>
               ))}
-              <div style={{marginTop:20}}>
+             <div style={{marginTop:20}}>
                 <div style={{fontSize:12,fontWeight:700,letterSpacing:1,color:B.midGrey,textTransform:"uppercase",marginBottom:10}}>Nächste Termine</div>
-                {events.filter(e=>e && e.team===selectedTeam.name&&(e.date||"")>=todayStr).sort((a,b)=>safeStr(a.date).localeCompare(safeStr(b.date))).slice(0,4).map(ev=><EventCard key={ev.id || Math.random()} ev={ev} controls={false}/>)}
+                {events.filter(e=>e && e.team===selectedTeam.name&&(e.date||"")>=todayStr).sort((a,b)=>safeStr(a.date).localeCompare(safeStr(b.date))).slice(0,4).map(ev=>(
+                  <EventCard 
+                    key={ev.id || Math.random()} 
+                    ev={ev} 
+                    controls={false} 
+                    showDate={true}
+                    onClick={() => {
+                      const d = new Date(ev.date);
+                      if (!isNaN(d.getTime())) {
+                        setCurrentDate(new Date(d.getFullYear(), d.getMonth(), 1)); // Stellt den Kalendermonat ein
+                        setSelectedDay(d.getDate()); // Wählt exakt diesen Tag aus
+                        setView("calendar"); // Wechselt zum Kalender-Reiter
+                        setSelectedTeam(null); // Schließt die Team-Detailansicht
+                      }
+                    }}
+                  />
+                ))}
                 {events.filter(e=>e && e.team===selectedTeam.name&&(e.date||"")>=todayStr).length===0&&<div style={{fontSize:13,color:B.midGrey,fontFamily:"'Barlow',sans-serif"}}>Keine kommenden Termine</div>}
               </div>
             </div>
