@@ -170,6 +170,7 @@ export default function TVHindelangApp() {
   const chatEndRef = useRef(null);
   const csvInputRef = useRef(null);
   const [isImporting, setIsImporting] = useState(false);
+  const [fullscreenImage, setFullscreenImage] = useState(null);
 
   const isAdmin = userRole === "admin";
   const isTrainer = userRole === "trainer";
@@ -776,7 +777,7 @@ const EventCard = ({ ev, controls=true, showDate=false, onClick=null }) => {
                   <div key={n.id || Math.random()} style={{padding:"10px 12px",background:B.amberLight,borderRadius:8,borderLeft:`3px solid ${B.amber}`}}>
                     <div style={{fontWeight:800,fontSize:14,marginBottom:3}}>{safeStr(n.title)}</div>
                     <div style={{fontSize:12,color:B.charcoal,fontFamily:"'Barlow',sans-serif",lineHeight:1.5}}>{safeStr(n.body).slice(0,90)}{safeStr(n.body).length>90?"…":""}</div>
-                    {n.fileUrl && n.fileUrl.startsWith("data:image") ? ( <a href={n.fileUrl} target="_blank" rel="noopener noreferrer" style={{display:"block", marginTop:8}}><img src={n.fileUrl} alt="News Anhang" style={{width:"100%", maxHeight:160, objectFit:"cover", borderRadius:6, border:`1px solid ${B.lightGrey}`}} /></a> ) : null}
+                    {n.fileUrl && n.fileUrl.startsWith("data:image") ? ( <div onClick={() => setFullscreenImage(n.fileUrl)} style={{display:"block", marginTop:8, cursor: "zoom-in"}}><img src={n.fileUrl} alt="News Anhang" style={{width:"100%", maxHeight:160, objectFit:"cover", borderRadius:6, border:`1px solid ${B.lightGrey}`}} /></div> ) : null}
                     <div style={{fontSize:10,color:B.midGrey,marginTop:6,fontWeight:600}}>{safeStr(n.date)} · {safeStr(n.author)}</div>
                   </div>
                 )})}
@@ -1045,7 +1046,7 @@ const EventCard = ({ ev, controls=true, showDate=false, onClick=null }) => {
                         <div style={{flex:1}}>
                           <div style={{fontWeight:800,fontSize:16,marginBottom:4}}>{safeStr(n.title) || "Ohne Titel"}</div>
                           <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif",lineHeight:1.5,marginBottom:6}}>{safeStr(n.body).slice(0,90)}{safeStr(n.body).length>90?"…":""}</div>
-                          {n.fileUrl && n.fileUrl.startsWith("data:image") ? ( <a href={n.fileUrl} target="_blank" rel="noopener noreferrer" style={{display:"block", marginTop:8, marginBottom:6}}><img src={n.fileUrl} alt="Anhang" style={{maxWidth:"100%", maxHeight:120, objectFit:"cover", borderRadius:6, border:`1px solid ${B.lightGrey}`}} /></a>) : null}
+                          {n.fileUrl && n.fileUrl.startsWith("data:image") ? ( <div onClick={() => setFullscreenImage(n.fileUrl)} style={{display:"block", marginTop:8, marginBottom:6, cursor: "zoom-in"}}><img src={n.fileUrl} alt="Anhang" style={{maxWidth:"100%", maxHeight:120, objectFit:"cover", borderRadius:6, border:`1px solid ${B.lightGrey}`}} /></div>) : null}
                           <div style={{fontSize:11,color:B.midGrey,fontWeight:600}}>{safeStr(n.date)} · {safeStr(n.author)}</div>
                         </div>
                         <div className="event-card-actions"><button className="btn btn-edit" style={{background:"#25D366", color:"white"}} onClick={()=>shareNewsWhatsApp(n)}>📲 WA</button><button className="btn btn-edit" onClick={()=>openEditEvent(n)}>✏️</button><button className="btn btn-danger" onClick={()=>deleteNews(n.id)}>🗑️</button></div>
@@ -1105,6 +1106,17 @@ const EventCard = ({ ev, controls=true, showDate=false, onClick=null }) => {
             © {new Date().getFullYear()} TV Hindelang e.V. Fussball
           </div>
         </div>
+
+        {/* ════ BILD FULLSCREEN MODAL ════ */}
+        {fullscreenImage && (
+          <div className="modal-bg" style={{zIndex: 9999, padding: 20, background: "rgba(0,0,0,0.85)", flexDirection: "column"}} onClick={() => setFullscreenImage(null)}>
+            <div style={{width: "100%", maxWidth: 800, display: "flex", justifyContent: "flex-end", marginBottom: 10}}>
+              <button style={{background: B.white, color: B.anthracite, border: "none", borderRadius: "50%", width: 36, height: 36, fontSize: 18, fontWeight: "bold", cursor: "pointer"}} onClick={() => setFullscreenImage(null)}>✕</button>
+            </div>
+            <img src={fullscreenImage} style={{maxWidth: "100%", maxHeight: "80vh", objectFit: "contain", borderRadius: 8, boxShadow: "0 10px 40px rgba(0,0,0,0.5)"}} alt="Vollbild" onClick={(e) => e.stopPropagation()} />
+          </div>
+        )}
+
       </main>
 
       {/* ── MOBILE BOTTOM NAV ── */}
