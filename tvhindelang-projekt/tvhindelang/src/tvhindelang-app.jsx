@@ -1075,7 +1075,6 @@ export default function TVHindelangApp() {
         <div style={{ textAlign: "center", padding: "60px 24px 20px", marginTop: "auto" }}>
           <div style={{ display: "flex", justifyContent: "center", gap: 20, fontSize: 12, fontWeight: 700, color: B.midGrey, textTransform: "uppercase", letterSpacing: 1 }}>
             <a href="https://www.tvhindelang.de/impressum" target="_blank" rel="noopener noreferrer" style={{ color: B.midGrey, textDecoration: "none" }}>Impressum (Web)</a>
-            <a href="https://www.tvhindelang.de/datenschutz" target="_blank" rel="noopener noreferrer" style={{ color: B.midGrey, textDecoration: "none" }}>Datenschutz (Web)</a>
             <span style={{ color: B.midGrey, cursor: "pointer" }} onClick={() => setShowPrivacyModal(true)}>App-Datenschutz</span>
           </div>
           <div style={{ fontSize: 11, color: B.midGrey, marginTop: 12, fontFamily: "'Barlow', sans-serif" }}>
