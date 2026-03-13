@@ -1105,7 +1105,6 @@ const EventCard = ({ ev, controls=true, showDate=false, onClick=null }) => {
             © {new Date().getFullYear()} TV Hindelang e.V. Fussball
           </div>
         </div>
-
       </main>
 
       {/* ── MOBILE BOTTOM NAV ── */}
@@ -1282,6 +1281,7 @@ const EventCard = ({ ev, controls=true, showDate=false, onClick=null }) => {
           </div>
         </div>
       )}
+
       {/* ════ APP-DATENSCHUTZ MODAL ════ */}
       {showPrivacyModal && (
         <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&setShowPrivacyModal(false)}>
@@ -1312,20 +1312,10 @@ const EventCard = ({ ev, controls=true, showDate=false, onClick=null }) => {
           </div>
         </div>
       )}
-      <div style={{display:"flex",gap:10,marginTop:16}}>
-              <button className="btn btn-ghost" style={{flex:1}} onClick={()=>setShowNewThread(false)}>Abbrechen</button>
-              <button className="btn btn-primary" style={{flex:2}} onClick={createThread} disabled={newThreadType==="group"?!newThreadTeam:!newThreadRecipientId}>Chat starten</button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ── UNSICHTBARER VERCEL ZÄHLER ── */}
       <Analytics />
 
-    </div>
-  );
-}
     </div>
   );
 }
