@@ -158,6 +158,7 @@ export default function TVHindelangApp() {
   const [newThreadRecipientId, setNewThreadRecipientId] = useState(""); 
 
   const [showUserModal, setShowUserModal]   = useState(false);
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [editingUser, setEditingUser]       = useState(null);
   const [userForm, setUserForm]             = useState({ name: "", email: "", password: "", role: "player", assignedTeams: [] });
   const [userSaving, setUserSaving]         = useState(false);
@@ -1073,14 +1074,15 @@ export default function TVHindelangApp() {
         {/* ── FOOTER ── */}
         <div style={{ textAlign: "center", padding: "60px 24px 20px", marginTop: "auto" }}>
           <div style={{ display: "flex", justifyContent: "center", gap: 20, fontSize: 12, fontWeight: 700, color: B.midGrey, textTransform: "uppercase", letterSpacing: 1 }}>
-            <a href="https://www.tvhindelang.de/impressum" target="_blank" rel="noopener noreferrer" style={{ color: B.midGrey, textDecoration: "none" }}>Impressum</a>
-            <a href="https://www.tvhindelang.de/datenschutz" target="_blank" rel="noopener noreferrer" style={{ color: B.midGrey, textDecoration: "none" }}>Datenschutz</a>
+            <a href="https://www.tvhindelang.de/impressum" target="_blank" rel="noopener noreferrer" style={{ color: B.midGrey, textDecoration: "none" }}>Impressum (Web)</a>
+            <a href="https://www.tvhindelang.de/datenschutz" target="_blank" rel="noopener noreferrer" style={{ color: B.midGrey, textDecoration: "none" }}>Datenschutz (Web)</a>
+            <span style={{ color: B.midGrey, cursor: "pointer" }} onClick={() => setShowPrivacyModal(true)}>App-Datenschutz</span>
           </div>
           <div style={{ fontSize: 11, color: B.midGrey, marginTop: 12, fontFamily: "'Barlow', sans-serif" }}>
             © {new Date().getFullYear()} TV Hindelang e.V. Fussball
           </div>
         </div>
-        
+
       </main>
 
       {/* ── MOBILE BOTTOM NAV ── */}
@@ -1254,6 +1256,36 @@ export default function TVHindelangApp() {
               <button className="btn btn-ghost" style={{flex:1}} onClick={()=>setShowNewThread(false)}>Abbrechen</button>
               <button className="btn btn-primary" style={{flex:2}} onClick={createThread} disabled={newThreadType==="group"?!newThreadTeam:!newThreadRecipientId}>Chat starten</button>
             </div>
+          </div>
+        </div>
+      )}
+      {/* ════ APP-DATENSCHUTZ MODAL ════ */}
+      {showPrivacyModal && (
+        <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&setShowPrivacyModal(false)}>
+          <div className="modal">
+            <div style={{height:4,background:`linear-gradient(90deg,${B.teal},${B.tealDark})`,borderRadius:"4px 4px 0 0",margin:"-30px -30px 22px"}}/>
+            <h2 style={{fontSize:22,fontWeight:900,letterSpacing:1,textTransform:"uppercase",marginBottom:16}}>App-Datenschutz</h2>
+            
+            <div style={{fontSize: 14, color: B.charcoal, fontFamily: "'Barlow', sans-serif", lineHeight: 1.6, display: "flex", flexDirection: "column", gap: 12}}>
+              <p>Diese Web-App des TV Hindelang e.V. nutzt zur Bereitstellung ihrer Funktionen ausgewählte Dienste, die Daten europarechtskonform (DSGVO) verarbeiten:</p>
+              
+              <div>
+                <strong>1. Hosting & Statistik (Vercel Inc.):</strong><br/>
+                Die App wird auf Servern von Vercel gehostet. Beim Aufruf werden technisch bedingt Verbindungsdaten (wie die anonymisierte IP-Adresse) übertragen. Zur Auswertung der App-Nutzung verwenden wir Vercel Web Analytics, was komplett ohne Cookies und ohne persönliches Tracking (Tracking-frei) funktioniert.
+              </div>
+              
+              <div>
+                <strong>2. Benutzerkonten & Datenbank (Google Firebase):</strong><br/>
+                Für den Login-Bereich, die Speicherung von Terminen, News, Chat-Nachrichten und Mannschaftszuordnungen nutzen wir Google Firebase (Serverstandort Europa). Dabei werden E-Mail-Adressen, verschlüsselte Passwörter sowie die von den Nutzern eingegebenen Profil-Namen sicher verarbeitet.
+              </div>
+              
+              <div>
+                <strong>3. Speicherung auf dem Gerät (Local Storage):</strong><br/>
+                Diese App setzt keine Werbe-Cookies. Es werden lediglich technisch zwingend notwendige Daten (z.B. der aktuelle Login-Status) im lokalen Speicher deines Browsers abgelegt, damit du nicht bei jedem Öffnen dein Passwort neu eingeben musst.
+              </div>
+            </div>
+
+            <button className="btn btn-primary" style={{width:"100%", marginTop: 24}} onClick={() => setShowPrivacyModal(false)}>Verstanden & Schließen</button>
           </div>
         </div>
       )}
