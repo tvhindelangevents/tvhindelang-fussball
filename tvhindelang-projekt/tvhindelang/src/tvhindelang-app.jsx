@@ -584,7 +584,7 @@ const EventCard = ({ ev, controls=true, showDate=false, onClick=null }) => {
 
   if (authLoading) return (
     <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:B.offWhite,flexDirection:"column",gap:16}}>
-      <PineLogo size={52}/>
+      <VereinsLogo size={64}/>
       <div style={{fontSize:14,color:B.midGrey,fontFamily:"'Barlow',sans-serif"}}>Wird geladen…</div>
     </div>
   );
@@ -594,7 +594,7 @@ const EventCard = ({ ev, controls=true, showDate=false, onClick=null }) => {
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=Barlow:wght@400;500&display=swap');*{box-sizing:border-box;margin:0;padding:0;}.input{background:#fff;border:1.5px solid ${B.lightGrey};color:${B.anthracite};border-radius:8px;padding:9px 13px;font-family:'Barlow',sans-serif;font-size:14px;width:100%;outline:none;transition:border-color .2s;}.input:focus{border-color:${B.teal};}.btn{border:none;border-radius:7px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:1px;text-transform:uppercase;transition:all .18s;}.btn-primary{background:${B.teal};color:white;padding:10px 22px;font-size:14px;}.btn-primary:hover{background:${B.tealDark};}.btn-primary:disabled{background:${B.lightGrey};color:${B.midGrey};cursor:not-allowed;}`}</style>
       <div style={{background:B.white,border:`1.5px solid ${B.lightGrey}`,borderRadius:16,padding:"40px 36px",width:"100%",maxWidth:400,boxShadow:"0 20px 60px rgba(0,0,0,.1)"}}>
         <div style={{display:"flex",flexDirection:"column",alignItems:"center",marginBottom:28}}>
-          <PineLogo size={52}/>
+          <VereinsLogo size={64}/>
           <div style={{fontSize:22,fontWeight:900,letterSpacing:2,textTransform:"uppercase",marginTop:12}}>TV Hindelang</div>
           <div style={{fontSize:13,color:B.midGrey,fontWeight:700,letterSpacing:2,textTransform:"uppercase"}}>
             {isRegisterMode ? "Registrierung" : "Fussball"}
