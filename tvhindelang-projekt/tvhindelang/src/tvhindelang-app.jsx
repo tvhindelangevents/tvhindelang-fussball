@@ -37,6 +37,7 @@ const EVENT_TYPES = [
   { value:"game",     label:"Spiel",       color:B.red,     bg:B.redLight   },
   { value:"meeting",  label:"Versammlung", color:B.amber,   bg:B.amberLight },
   { value:"other",    label:"Sonstiges",   color:B.midGrey, bg:B.offWhite   },
+  { value:"bus_block",label:"Sonderbelegung Bus", color:BUS.color, bg:BUS.bg },
 ];
 const DAYS   = ["Mo","Di","Mi","Do","Fr","Sa","So"];
 const MONTHS = ["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
@@ -529,7 +530,20 @@ export default function TVHindelangApp() {
   };
   const totalUnreadCount = visibleThreads.filter(checkUnread).length;
 
+  // --- BUS- & SICHTBARKEITS-LOGIK START ---
+  const isVisibleToMe = (ev) => {
+    if (!ev) return false;
+    if (ev.type === "bus_block") return isAdmin; // Nur Admins sehen reine Blockaden
+    return true;
+  };
+
+  const eventsOnFormDate = (events || []).filter(e => e.date === eventForm.date && e.id !== editingEvent?.id);
+  const isBus1Taken = eventsOnFormDate.some(e => e.bus1 || (e.type === "bus_block" && e.bus1));
+  const isBus2Taken = eventsOnFormDate.some(e => e.bus2 || (e.type === "bus_block" && e.bus2));
+  // --- BUS- & SICHTBARKEITS-LOGIK ENDE ---
+
   const matchesFilter = (ev) => {
+    if (!isVisibleToMe(ev)) return false;
     if (!ev) return false;
     const teamMatch = filterTeam === "Alle Mannschaften" || safeStr(ev.team) === safeStr(filterTeam);
     const typeMatch = filterEventType === "all" || safeStr(ev.type) === safeStr(filterEventType);
@@ -540,7 +554,7 @@ export default function TVHindelangApp() {
   const selectedStr = selectedDay ? `${year}-${String(month+1).padStart(2,"0")}-${String(selectedDay).padStart(2,"0")}` : "";
   const selectedEvs = selectedDay ? (events||[]).filter(e=>e?.date===selectedStr&&matchesFilter(e)).sort((a,b)=>safeStr(a?.time).localeCompare(safeStr(b?.time))) : [];
   const upcoming    = [...(events||[])].filter(e=>safeStr(e?.date)>=todayStr&&matchesFilter(e)).sort((a,b)=>safeStr(a?.date).localeCompare(safeStr(b?.date))||safeStr(a?.time).localeCompare(safeStr(b?.time))).slice(0,10);
-  const nextThree   = [...(events||[])].filter(e=>safeStr(e?.date)>=todayStr).sort((a,b)=>safeStr(a?.date).localeCompare(safeStr(b?.date))||safeStr(a?.time).localeCompare(safeStr(b?.time))).slice(0,3);
+  const nextThree   = [...(events||[])].filter(e=>safeStr(e?.date)>=todayStr && e?.type !== "bus_block" && e?.showInNext !== false).sort((a,b)=>safeStr(a?.date).localeCompare(safeStr(b?.date))||safeStr(a?.time).localeCompare(safeStr(b?.time))).slice(0,3);
 
   const NAV = [
     { id:"home",     icon:"🏠", label:"Start"        },
@@ -1269,12 +1283,15 @@ const EventCard = ({ ev, controls=true, showDate=false, onClick=null }) => {
               <div><label style={LBL}>Hinweise</label><textarea className="input" value={eventForm.notes} onChange={e=>setEventForm({...eventForm,notes:e.target.value})}/></div>
               <div><label style={LBL}>🚌 Vereinsbus</label>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                  {[["bus1","Bus 1"],["bus2","Bus 2"]].map(([key,label])=>(
-                    <div key={key} onClick={()=>setEventForm({...eventForm,[key]:!eventForm[key]})} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 13px",borderRadius:8,border:`2px solid ${eventForm[key]?BUS.color:B.lightGrey}`,background:eventForm[key]?BUS.bg:B.white,cursor:"pointer",transition:"all .15s"}}>
-                      <div style={{width:20,height:20,borderRadius:5,border:`2px solid ${eventForm[key]?BUS.color:B.lightGrey}`,background:eventForm[key]?BUS.color:B.white,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{eventForm[key]&&<span style={{color:"white",fontSize:12,fontWeight:800}}>✓</span>}</div>
-                      <span style={{fontSize:13,fontWeight:800,color:eventForm[key]?BUS.color:B.charcoal}}>{label}</span>
-                    </div>
-                  ))}
+                  {[["bus1", "Bus 1", isBus1Taken], ["bus2", "Bus 2", isBus2Taken]].map(([key, label, isTaken]) => (
+  <div key={key} style={{display:"flex", flexDirection:"column", gap: 4}}>
+    <div onClick={() => { if(!isTaken) setEventForm({...eventForm, [key]: !eventForm[key]}) }} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 13px",borderRadius:8,border:`2px solid ${eventForm[key]?BUS.color:B.lightGrey}`,background:eventForm[key]?BUS.bg:B.white,cursor:isTaken?"not-allowed":"pointer",opacity:isTaken?0.5:1,transition:"all .15s"}}>
+      <div style={{width:20,height:20,borderRadius:5,border:`2px solid ${eventForm[key]?BUS.color:B.lightGrey}`,background:eventForm[key]?BUS.color:B.white,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{eventForm[key]&&<span style={{color:"white",fontSize:12,fontWeight:800}}>✓</span>}</div>
+      <span style={{fontSize:13,fontWeight:800,color:eventForm[key]?BUS.color:B.charcoal}}>{label}</span>
+    </div>
+    {isTaken && <div style={{fontSize: 11, color: B.red, fontWeight: 700}}>⚠️ Bereits belegt</div>}
+  </div>
+))}
                 </div>
               </div>
               <div style={{display:"flex",gap:10,marginTop:4}}>
