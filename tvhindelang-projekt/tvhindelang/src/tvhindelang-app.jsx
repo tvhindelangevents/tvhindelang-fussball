@@ -884,24 +884,24 @@ const EventCard = ({ ev, controls=true, showDate=false, onClick=null }) => {
         )}
 
         {/* ════ TEAMS ════ */}
-        {view==="teams"&&!selectedTeam&&(
-          <div style={{maxWidth:1040,margin:"0 auto"}}>
-            <h1 style={{fontSize:30,fontWeight:900,letterSpacing:2,textTransform:"uppercase",marginBottom:22}}>Mannschaften <span style={{color:B.teal}}>({teams.length})</span></h1>
-            <div className="grid-2" style={{gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))"}}>
-              <div className="grid-2" style={{gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))"}}>
-              {[...teams].sort((a, b) => (a.sortIndex || 0) - (b.sortIndex || 0)).map(ti=>{
-                if (!ti) return null;
-                return (
-                <div key={ti.id || Math.random()} className="team-card" onClick={()=>setSelectedTeam(ti)}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}><div style={{fontSize:22,fontWeight:900,letterSpacing:1}}>{safeStr(ti.name)}</div><span style={{display:"inline-block",padding:"2px 9px",borderRadius:20,fontSize:11,fontWeight:700,background:B.tealLight,color:B.teal}}>{safeStr(ti.jahrgang)}</span></div>
-                  <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif",marginBottom:4}}>👤 <strong>Trainer:</strong> {getTrainerNames(ti)}</div>
-                  <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif"}}>⏰ {safeStr(ti.training)}</div>
-                  <div style={{marginTop:12,fontSize:11,color:B.teal,fontWeight:700}}>Details →</div>
-                </div>
-              )})}
-            </div>
+      {/* ════ TEAMS ════ */}
+      {view==="teams"&&!selectedTeam&&(
+        <div style={{maxWidth:1040,margin:"0 auto"}}>
+          <h1 style={{fontSize:30,fontWeight:900,letterSpacing:2,textTransform:"uppercase",marginBottom:22}}>Mannschaften <span style={{color:B.teal}}>({teams.length})</span></h1>
+          <div className="grid-2" style={{gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))"}}>
+            {[...teams].sort((a, b) => (a.sortIndex || 0) - (b.sortIndex || 0)).map(ti=>{
+              if (!ti) return null;
+              return (
+              <div key={ti.id || Math.random()} className="team-card" onClick={()=>setSelectedTeam(ti)}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}><div style={{fontSize:22,fontWeight:900,letterSpacing:1}}>{safeStr(ti.name)}</div><span style={{display:"inline-block",padding:"2px 9px",borderRadius:20,fontSize:11,fontWeight:700,background:B.tealLight,color:B.teal}}>{safeStr(ti.jahrgang)}</span></div>
+                <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif",marginBottom:4}}>👤 <strong>Trainer:</strong> {getTrainerNames(ti)}</div>
+                <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif"}}>⏰ {safeStr(ti.training)}</div>
+                <div style={{marginTop:12,fontSize:11,color:B.teal,fontWeight:700}}>Details →</div>
+              </div>
+            )})}
           </div>
-        )}
+        </div>
+      )}
         {view==="teams"&&selectedTeam&&(
           <div style={{maxWidth:680,margin:"0 auto"}}>
             <button className="btn btn-ghost" style={{marginBottom:20}} onClick={()=>setSelectedTeam(null)}>← Zurück</button>
