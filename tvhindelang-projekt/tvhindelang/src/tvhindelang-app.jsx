@@ -1249,6 +1249,7 @@ const EventCard = ({ ev, controls=true, showDate=false, onClick=null }) => {
                 <button className="btn btn-ghost" style={{fontSize:11, padding:"6px 12px", marginTop:2}} onClick={() => setTeamForm({...teamForm, trainers: [...teamForm.trainers, {name:"", phone:""}]})}>+ Weiterer Trainer</button>
               </div>
               <div><label style={LBL}>Trainingszeiten</label><input className="input" placeholder="z.B. Di & Do 17:00 Uhr" value={teamForm.training} onChange={e=>setTeamForm({...teamForm,training:e.target.value})}/></div>
+              <div><label style={LBL}>Link zur BFV Livetabelle (Optional)</label><input className="input" placeholder="z.B. https://widget-prod.bfv.de/..." value={teamForm.bfvLink} onChange={e=>setTeamForm({...teamForm,bfvLink:e.target.value})}/></div>
               <div style={{display:"flex",gap:10,marginTop:4}}>
                 <button className="btn btn-ghost" style={{flex:1}} onClick={()=>setShowTeamModal(false)}>Abbrechen</button>
                 <button className="btn btn-primary" style={{flex:2}} onClick={saveTeam} disabled={!teamForm.name}>{editingTeam?"✓ Speichern":"+ Erstellen"}</button>
