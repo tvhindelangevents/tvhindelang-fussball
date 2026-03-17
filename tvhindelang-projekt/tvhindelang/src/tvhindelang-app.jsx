@@ -1325,6 +1325,7 @@ const EventCard = ({ ev, controls=true, showDate=false, onClick=null }) => {
       )}
 
       {/* ════ APP-DATENSCHUTZ MODAL ════ */}
+     {/* ════ APP-DATENSCHUTZ MODAL ════ */}
       {showPrivacyModal && (
         <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&setShowPrivacyModal(false)}>
           <div className="modal">
@@ -1336,17 +1337,22 @@ const EventCard = ({ ev, controls=true, showDate=false, onClick=null }) => {
               
               <div>
                 <strong>1. Hosting & Statistik (Vercel Inc.):</strong><br/>
-                Die App wird auf Servern von Vercel gehostet. Beim Aufruf werden technisch bedingt Verbindungsdaten (wie die anonymisierte IP-Adresse) übertragen. Zur Auswertung der App-Nutzung verwenden wir Vercel Web Analytics, was komplett ohne Cookies und ohne persönliches Tracking (Tracking-frei) funktioniert.
+                Die App wird auf Servern von Vercel gehostet. Beim Aufruf werden technisch bedingt Verbindungsdaten (wie die anonymisierte IP-Adresse) übertragen. Zur Auswertung der App-Nutzung verwenden wir Vercel Web Analytics (komplett ohne Cookies).
               </div>
               
               <div>
                 <strong>2. Benutzerkonten & Datenbank (Google Firebase):</strong><br/>
-                Für den Login-Bereich, die Speicherung von Terminen, News, Chat-Nachrichten und Mannschaftszuordnungen nutzen wir Google Firebase (Serverstandort Europa). Dabei werden E-Mail-Adressen, verschlüsselte Passwörter sowie die von den Nutzern eingegebenen Profil-Namen sicher verarbeitet.
+                Für den Login und die Speicherung von Terminen, News und Chats nutzen wir Google Firebase. Dabei werden E-Mail-Adressen und Profil-Namen sicher verarbeitet.
               </div>
               
               <div>
                 <strong>3. Speicherung auf dem Gerät (Local Storage):</strong><br/>
-                Diese App setzt keine Werbe-Cookies. Es werden lediglich technisch zwingend notwendige Daten (z.B. der aktuelle Login-Status) im lokalen Speicher deines Browsers abgelegt, damit du nicht bei jedem Öffnen dein Passwort neu eingeben musst.
+                Es werden technisch zwingend notwendige Daten (z.B. der aktuelle Login-Status) im lokalen Speicher abgelegt, damit du nicht bei jedem Öffnen dein Passwort neu eingeben musst.
+              </div>
+
+              <div>
+                <strong>4. BFV / FuPa Livetabellen (Widgets):</strong><br/>
+                Zur Darstellung aktueller Spielstände binden wir sogenannte Widgets (iFrames) des Bayerischen Fußball-Verbandes (BFV) bzw. von FuPa ein. Wenn du die Detailseite einer Mannschaft aufrufst, wird eine direkte Verbindung zu den Servern des jeweiligen Anbieters hergestellt. Dabei wird technisch bedingt deine IP-Adresse an den BFV/FuPa übertragen.
               </div>
             </div>
 
