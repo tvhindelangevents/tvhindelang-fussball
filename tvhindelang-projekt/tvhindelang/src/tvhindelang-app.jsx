@@ -802,7 +802,7 @@ const EventCard = ({ ev: rawEv, controls=true, showDate=false, onClick=null }) =
           <div className="hide-scroll" style={{padding:"8px 24px",display:"flex",alignItems:"center",gap:16}}>
             <span style={{fontSize:11,fontWeight:800,color:B.midGrey,letterSpacing:1,textTransform:"uppercase",flexShrink:0}}>🎨 Legende:</span>
             {EVENT_TYPES.map(t=>(<div key={t.value} style={{display:"flex",alignItems:"center",gap:5,fontSize:12,fontWeight:600,color:B.charcoal,flexShrink:0}}><div style={{width:12,height:12,borderRadius:3,background:t.color}}/>{t.label}</div>))}
-            <div style={{display:"flex",alignItems:"center",gap:5,fontSize:12,fontWeight:600,color:B.charcoal,flexShrink:0}}><div style={{width:12,height:12,borderRadius:3,background:BUS.color}}/>🚌 Bus</div>
+            <div style={{display:"flex",alignItems:"center",gap:5,fontSize:12,fontWeight:600,color:B.charcoal,flexShrink:0}}>🚌 = Bus gebucht</div>
           </div>
         </div>
       )}
