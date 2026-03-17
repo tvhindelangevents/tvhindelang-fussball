@@ -247,7 +247,15 @@ export default function TVHindelangApp() {
     setSavingOnboarding(true);
     
     try {
-      const assigned = onboardingForm.role === "sponsor" ? [] : [onboardingForm.teamId]; 
+      // Wir suchen in der Team-Liste nach dem Team, dessen ID ausgewählt wurde
+      const selectedTeamObj = teams.find(t => t.id === onboardingForm.teamId);
+      
+      // Wir nehmen den Namen (z.B. "Herren 1"), nicht die ID
+      const teamName = selectedTeamObj ? selectedTeamObj.name : "";
+      
+      const assigned = (onboardingForm.role === "sponsor" || onboardingForm.role === "player_inactive") 
+                       ? [] 
+                       : [teamName]; 
       
       // Wir speichern die Rolle in der Datenbank ab (mit user.uid)
       await setDoc(doc(db, "users", user.uid), {
