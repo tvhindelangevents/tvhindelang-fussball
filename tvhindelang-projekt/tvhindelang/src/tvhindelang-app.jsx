@@ -926,18 +926,23 @@ const EventCard = ({ ev, controls=true, showDate=false, onClick=null }) => {
                   <div><div style={{fontSize:11,fontWeight:700,letterSpacing:1,color:B.midGrey,textTransform:"uppercase"}}>{row.label}</div><div style={{fontSize:15,fontWeight:700,marginTop:1,fontFamily:"'Barlow',sans-serif"}}>{row.val}</div></div>
                 </div>
               ))}
-              {selectedTeam.bfvLink && (
+              {(selectedTeam.bfvLinks?.length > 0 || selectedTeam.bfvLink) && (
                 <div style={{marginTop: 24}}>
-                  <a href={selectedTeam.bfvLink} target="_blank" rel="noopener noreferrer" style={{display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", background: B.offWhite, borderRadius: 12, textDecoration: "none", border: `1.5px solid ${B.lightGrey}`, transition: "all 0.2s ease"}}>
-                    <div style={{display: "flex", alignItems: "center", gap: 14}}>
-                      <div style={{fontSize: 24}}>🏆</div>
-                      <div>
-                        <div style={{fontSize: 14, fontWeight: 800, color: B.charcoal, fontFamily: "'Barlow', sans-serif"}}>Aktuelle Livetabelle</div>
-                        <div style={{fontSize: 11, color: B.midGrey, marginTop: 2}}>Beim BFV ansehen</div>
-                      </div>
-                    </div>
-                    <div style={{color: B.teal, fontWeight: 900, fontSize: 18}}>↗</div>
-                  </a>
+                  <div style={{fontSize:12,fontWeight:700,letterSpacing:1,color:B.midGrey,textTransform:"uppercase",marginBottom:10}}>🏆 Livetabellen</div>
+                  <div style={{display:"flex", flexDirection:"column", gap:10}}>
+                    {(selectedTeam.bfvLinks?.length > 0 ? selectedTeam.bfvLinks : [{name: "Livetabelle", url: selectedTeam.bfvLink}]).map((link, idx) => link.url ? (
+                      <a key={idx} href={link.url} target="_blank" rel="noopener noreferrer" style={{display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", background: B.offWhite, borderRadius: 12, textDecoration: "none", border: `1.5px solid ${B.lightGrey}`, transition: "all 0.2s ease"}}>
+                        <div style={{display: "flex", alignItems: "center", gap: 14}}>
+                          <div style={{fontSize: 24}}>🏆</div>
+                          <div>
+                            <div style={{fontSize: 14, fontWeight: 800, color: B.charcoal, fontFamily: "'Barlow', sans-serif"}}>{link.name || "Livetabelle"}</div>
+                            <div style={{fontSize: 11, color: B.midGrey, marginTop: 2}}>Beim BFV ansehen</div>
+                          </div>
+                        </div>
+                        <div style={{color: B.teal, fontWeight: 900, fontSize: 18}}>↗</div>
+                      </a>
+                    ) : null)}
+                  </div>
                 </div>
               )}
              <div style={{marginTop:20}}>
