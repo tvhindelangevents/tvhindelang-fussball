@@ -926,6 +926,14 @@ const EventCard = ({ ev, controls=true, showDate=false, onClick=null }) => {
                   <div><div style={{fontSize:11,fontWeight:700,letterSpacing:1,color:B.midGrey,textTransform:"uppercase"}}>{row.label}</div><div style={{fontSize:15,fontWeight:700,marginTop:1,fontFamily:"'Barlow',sans-serif"}}>{row.val}</div></div>
                 </div>
               ))}
+              {selectedTeam.bfvLink && (
+                <div style={{marginTop: 24}}>
+                  <div style={{fontSize:12,fontWeight:700,letterSpacing:1,color:B.midGrey,textTransform:"uppercase",marginBottom:10}}>🏆 Livetabelle</div>
+                  <div style={{borderRadius: 10, overflow: "hidden", border: `1.5px solid ${B.lightGrey}`, background: B.white}}>
+                    <iframe src={selectedTeam.bfvLink} width="100%" height="420" frameBorder="0" style={{display: "block"}} title={`Tabelle ${selectedTeam.name}`} />
+                  </div>
+                </div>
+              )}
              <div style={{marginTop:20}}>
                 <div style={{fontSize:12,fontWeight:700,letterSpacing:1,color:B.midGrey,textTransform:"uppercase",marginBottom:10}}>Nächste Termine</div>
                 {events.filter(e=>e && e.team===selectedTeam.name&&(e.date||"")>=todayStr).sort((a,b)=>safeStr(a.date).localeCompare(safeStr(b.date))).slice(0,4).map(ev=>(
