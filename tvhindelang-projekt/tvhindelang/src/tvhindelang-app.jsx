@@ -195,8 +195,20 @@ export default function TVHindelangApp() {
   const isAdmin = userRole === "admin";
   const isTrainer = userRole === "trainer";
   const canAccessAdmin = isAdmin || isTrainer; 
+  
+  // --- INTELLIGENTE BERECHTIGUNGEN START ---
+  const myProfileObj = allUsers.find(u => u.id === user?.uid);
+  const myTeams = Array.isArray(myProfileObj?.assignedTeams) ? myProfileObj.assignedTeams : [];
+  const myNameOrEmail = myProfileObj?.name || user?.email;
+  
+  // Darf man diesen speziellen Termin / diese spezielle News bearbeiten?
+  const canManageEvent = (ev) => isAdmin || (isTrainer && myTeams.includes(safeStr(ev?.team)));
+  const canManageNews = (n) => isAdmin || (isTrainer && safeStr(n?.author) === safeStr(myNameOrEmail));
+  
+  // Darf man den Plus-Button sehen und überhaupt in den Admin-Tab?
   const canEditEvents = isAdmin || isTrainer;  
   const canEditNews = isAdmin || isTrainer;    
+  // --- INTELLIGENTE BERECHTIGUNGEN ENDE ---    
 
   const year  = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -609,7 +621,7 @@ const EventCard = ({ ev: rawEv, controls=true, showDate=false, onClick=null }) =
             </div>
             {ev.location&&<div style={{fontSize:12,color:B.midGrey,marginTop:1}}>📍 {safeStr(ev.location)}</div>}
             {ev.notes&&<div style={{fontSize:12,color:B.charcoal,marginTop:4,fontStyle:"italic",fontFamily:"'Barlow',sans-serif"}}>{safeStr(ev.notes)}</div>}
-            {canEditEvents && Array.isArray(ev.declines) && ev.declines.length > 0 && (
+           {canManageEvent(ev) && Array.isArray(ev.declines) && ev.declines.length > 0 && (
               <div style={{marginTop: 8, padding: "6px 8px", background: B.redLight, borderRadius: 6, fontSize: 12, color: B.red, fontFamily:"'Barlow',sans-serif"}}>
                 <strong>❌ {ev.declines.length} Absage(n):</strong> {ev.declines.filter(n=>typeof n==='string').join(", ")}
               </div>
@@ -621,7 +633,7 @@ const EventCard = ({ ev: rawEv, controls=true, showDate=false, onClick=null }) =
                 {hasDeclined ? "✅ Doch dabei" : "❌ Ich fehle"}
               </button>
             )}
-            {canEditEvents&&controls&&(
+            {canManageEvent(ev)&&controls&&(
               <div style={{display:"flex", gap:4, marginTop: 4}} className="event-card-admin-actions">
                 <button className="btn btn-edit" style={{background:"#25D366", color:"white"}} onClick={(e)=>{e.stopPropagation(); shareEventWhatsApp(ev);}} title="In WhatsApp teilen">📲 WA</button>
                 <button className="btn btn-edit" onClick={(e)=>{e.stopPropagation(); openEditEvent(ev);}}>✏️</button>
@@ -937,11 +949,11 @@ const EventCard = ({ ev: rawEv, controls=true, showDate=false, onClick=null }) =
                       <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3,flexWrap:"wrap"}}><span style={{fontWeight:800,fontSize:16}}>{safeStr(ev.title)}</span><Chip bg={t.bg} c={t.color}>{t.label}</Chip>{ev.team&&<Chip bg={B.anthracite+"11"} c={B.charcoal}>{safeStr(ev.team)}</Chip>}{ev.bus1&&<Chip bg={BUS.bg} c={BUS.color} border={`1px solid ${BUS.border}`}>🚌 Bus 1</Chip>}{ev.bus2&&<Chip bg={BUS.bg} c={BUS.color} border={`1px solid ${BUS.border}`}>🚌 Bus 2</Chip>}</div>
                       <div style={{color:B.midGrey,fontSize:12}}>⏰ {safeStr(ev.time)} {ev.endTime ? `- ${safeStr(ev.endTime)}` : ""} Uhr · 📍 {safeStr(ev.location)}</div>
                       {ev.notes&&<div style={{fontSize:12,color:B.charcoal,marginTop:2,fontStyle:"italic",fontFamily:"'Barlow',sans-serif"}}>{safeStr(ev.notes)}</div>}
-                      {canEditEvents && Array.isArray(ev.declines) && ev.declines.length > 0 && (<div style={{marginTop: 6, fontSize: 12, color: B.red, fontFamily:"'Barlow',sans-serif"}}><strong>❌ {ev.declines.length} Absage(n):</strong> {ev.declines.filter(n=>typeof n==='string').join(", ")}</div>)}
+                      {canManageEvent(ev) && Array.isArray(ev.declines) && ev.declines.length > 0 && (<div style={{marginTop: 6, fontSize: 12, color: B.red, fontFamily:"'Barlow',sans-serif"}}><strong>❌ {ev.declines.length} Absage(n):</strong> {ev.declines.filter(n=>typeof n==='string').join(", ")}</div>)}
                     </div>
                     <div className="schedule-actions">
                       <button className="btn btn-ghost" style={{padding:"5px 10px", fontSize:11, color: hasDeclined ? B.charcoal : B.red, background: hasDeclined ? B.lightGrey : B.redLight}} onClick={()=>toggleDecline(ev)}>{hasDeclined ? "✅ Doch dabei" : "❌ Ich fehle"}</button>
-                      {canEditEvents&&<div style={{display:"flex",gap:6}}><button className="btn btn-edit" style={{background:"#25D366", color:"white"}} onClick={()=>shareEventWhatsApp(ev)}>📲 WA</button><button className="btn btn-edit" onClick={()=>openEditEvent(ev)}>✏️</button><button className="btn btn-danger" onClick={()=>deleteEvent(ev.id)}>🗑️</button></div>}
+                      {canManageEvent(ev)&&<div style={{display:"flex",gap:6}}><button className="btn btn-edit" style={{background:"#25D366", color:"white"}} onClick={()=>shareEventWhatsApp(ev)}>📲 WA</button><button className="btn btn-edit" onClick={()=>openEditEvent(ev)}>✏️</button><button className="btn btn-danger" onClick={()=>deleteEvent(ev.id)}>🗑️</button></div>}
                     </div>
                   </div>
                 );
@@ -1129,11 +1141,11 @@ const EventCard = ({ ev: rawEv, controls=true, showDate=false, onClick=null }) =
             {adminSection==="events"&&canEditEvents&&(
               <div>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16, flexWrap: "wrap", gap: 10}}>
-                  <div style={{fontSize:16,fontWeight:800,letterSpacing:1,textTransform:"uppercase"}}>Termine ({(events||[]).length})</div>
+                  <div style={{fontSize:16,fontWeight:800,letterSpacing:1,textTransform:"uppercase"}}>Termine ({(events||[]).filter(canManageEvent).length})</div>
                   <div style={{display:"flex", gap: 10}}><input type="file" accept=".csv" style={{display: "none"}} ref={csvInputRef} onChange={handleCSVUpload} /><button className="btn btn-ghost" onClick={() => csvInputRef.current?.click()} disabled={isImporting}>{isImporting ? "⏳ Lädt..." : "📥 CSV"}</button><button className="btn btn-primary" onClick={()=>openAddEvent()}>+ Termin</button></div>
                 </div>
                 <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                  {[...(events||[])].sort((a,b)=>safeStr(a?.date).localeCompare(safeStr(b?.date))).map(ev=>{
+                  {[...(events||[])].filter(canManageEvent).sort((a,b)=>safeStr(a?.date).localeCompare(safeStr(b?.date))).map(rawEv=>{
                     if (!ev || typeof ev !== 'object') return null; const t=typeOf(ev.type); const sd = safeDateObj(ev.date);
                     return (
                       <div key={ev.id || Math.random()} className="card schedule-grid">
