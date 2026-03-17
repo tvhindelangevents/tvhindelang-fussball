@@ -46,7 +46,7 @@ const INIT_TEAMS = [];
 const INIT_INTRO = "Die Fußballabteilung des TV Hindelang e.V. vereint alle aktiven Mannschaften. Hier findet ihr Termine, Spielpläne und Vereinsnews an einem Ort.";
 
 const emptyEvent = (date="") => ({ type:"training", title:"", date, time:"17:00", endTime:"", location:"", notes:"", team:"Herren", bus1:false, bus2:false, declines: [] });
-const emptyTeamForm = () => ({ name: "", trainers: [{ name: "", phone: "" }], training: "", jahrgang: "", bfvLink: "" });
+const emptyTeamForm = () => ({ name: "", trainers: [{ name: "", phone: "" }], training: "", jahrgang: "", bfvLinks: [] });
 
 const LBL = { fontSize:11, fontWeight:700, letterSpacing:1, color:B.midGrey, textTransform:"uppercase", display:"block", marginBottom:5 };
 
@@ -415,7 +415,7 @@ export default function TVHindelangApp() {
   const openEditTeam = (t) => { 
     setEditingTeam(t); let loadedTrainers = Array.isArray(t?.trainers) ? t.trainers : [];
     if (loadedTrainers.length === 0 && t?.trainer) { loadedTrainers = [{ name: t.trainer, phone: "" }]; } else if (loadedTrainers.length === 0) { loadedTrainers = [{ name: "", phone: "" }]; }
-    setTeamForm({ name: t?.name || "", trainers: loadedTrainers, training: t?.training || "", jahrgang: t?.jahrgang || "", bfvLink: t?.bfvLink || "" }); setShowTeamModal(true); 
+    setTeamForm({ name: t?.name || "", trainers: loadedTrainers, training: t?.training || "", jahrgang: t?.jahrgang || "", bfvLinks: t?.bfvLinks || [] }); setShowTeamModal(true); 
   };
   const saveTeam = async () => {
     if (!teamForm.name) return;
@@ -1263,7 +1263,17 @@ const EventCard = ({ ev, controls=true, showDate=false, onClick=null }) => {
                 <button className="btn btn-ghost" style={{fontSize:11, padding:"6px 12px", marginTop:2}} onClick={() => setTeamForm({...teamForm, trainers: [...teamForm.trainers, {name:"", phone:""}]})}>+ Weiterer Trainer</button>
               </div>
               <div><label style={LBL}>Trainingszeiten</label><input className="input" placeholder="z.B. Di & Do 17:00 Uhr" value={teamForm.training} onChange={e=>setTeamForm({...teamForm,training:e.target.value})}/></div>
-              <div><label style={LBL}>BFV Widget-Code (Komplett einfügen)</label><textarea className="input" style={{height: 100, resize: "vertical"}} placeholder="Hier den kompletten BFV-Code inkl. <script> einfügen..." value={teamForm.bfvLink} onChange={e=>setTeamForm({...teamForm,bfvLink:e.target.value})}/></div>
+              <div>
+                <label style={LBL}>BFV Livetabellen (Mehrere möglich)</label>
+                {(teamForm.bfvLinks || []).map((link, idx) => (
+                  <div key={idx} style={{display:"flex", gap:8, marginBottom:8}}>
+                    <input className="input" style={{flex:1}} placeholder="Name (z.B. E1-Jugend)" value={link.name || ""} onChange={e => { const newLinks = [...(teamForm.bfvLinks||[])]; newLinks[idx].name = e.target.value; setTeamForm({...teamForm, bfvLinks: newLinks}); }}/>
+                    <input className="input" style={{flex:2}} placeholder="Link (https://...)" value={link.url || ""} onChange={e => { const newLinks = [...(teamForm.bfvLinks||[])]; newLinks[idx].url = e.target.value; setTeamForm({...teamForm, bfvLinks: newLinks}); }}/>
+                    <button type="button" className="btn" style={{padding:"0 12px", background:B.lightGrey, color:B.charcoal}} onClick={(e) => { e.preventDefault(); const newLinks = teamForm.bfvLinks.filter((_, i) => i !== idx); setTeamForm({...teamForm, bfvLinks: newLinks}); }}>X</button>
+                  </div>
+                ))}
+                <button type="button" className="btn" style={{fontSize:12, padding:"6px 12px", background:B.tealLight, color:B.tealDark, marginTop: 4}} onClick={(e) => { e.preventDefault(); setTeamForm({...teamForm, bfvLinks: [...(teamForm.bfvLinks||[]), {name:"", url:""}]}); }}>+ Weitere Tabelle</button>
+              </div>
               <div style={{display:"flex",gap:10,marginTop:4}}>
                 <button className="btn btn-ghost" style={{flex:1}} onClick={()=>setShowTeamModal(false)}>Abbrechen</button>
                 <button className="btn btn-primary" style={{flex:2}} onClick={saveTeam} disabled={!teamForm.name}>{editingTeam?"✓ Speichern":"+ Erstellen"}</button>
