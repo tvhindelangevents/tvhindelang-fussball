@@ -1203,11 +1203,25 @@ const EventCard = ({ ev, controls=true, showDate=false, onClick=null }) => {
 
       </main>
 
-      {/* ── MOBILE BOTTOM NAV ── */}
+    {/* ── MOBILE BOTTOM NAV ── */}
       <nav className="bottom-nav">
-        {NAV.map(({id,icon,label,badge})=>(
-          <button key={id} className={`bottom-nav-item ${view===id?"active":""}`} onClick={()=>{setView(id);setSelectedTeam(null); setActiveThread(null);}}><div className="bottom-nav-icon" style={{position:"relative"}}>{icon}{badge && <div className="nav-badge-mobile" />}</div>{label}</button>
+        {NAV.filter(item => {
+          // Falls der Menüpunkt 'chat' ist, darf er für Sponsor/Inaktiv nicht erscheinen
+          if (item.id === 'chat') {
+            return userRole !== "sponsor" && userRole !== "player_inactive";
+          }
+          return true;
+        }).map(({id,icon,label,badge})=>(
+          <button key={id} className={`bottom-nav-item ${view===id?"active":""}`} onClick={()=>{setView(id);setSelectedTeam(null); setActiveThread(null);}}>
+            <div className="bottom-nav-icon" style={{position:"relative"}}>
+              {icon}
+              {badge && <div className="nav-badge-mobile" />}
+            </div>
+            {label}
+          </button>
         ))}
+        
+        {/* Der Admin-Button bleibt wie er war */}
         {canAccessAdmin&&(<button className={`bottom-nav-item ${view==="admin"?"active":""}`} onClick={()=>{setView("admin");if(isTrainer && !isAdmin && adminSection !== "events" && adminSection !== "news") setAdminSection("events");}}><div className="bottom-nav-icon">⚙️</div>Admin</button>)}
       </nav>
 
