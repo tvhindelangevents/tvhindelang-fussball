@@ -1110,7 +1110,9 @@ const EventCard = ({ ev, controls=true, showDate=false, onClick=null }) => {
                           <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:3}}><span style={{fontWeight:800,fontSize:14}}>{safeStr(ev.title) || "Ohne Titel"}</span><Chip bg={t.bg} c={t.color}>{safeStr(t.label)}</Chip><Chip bg={B.anthracite+"11"} c={B.charcoal}>{safeStr(ev.team) || "Kein Team"}</Chip></div>
                           <div style={{fontSize:12,color:B.midGrey}}>⏰ {safeStr(ev.time)} {ev.endTime ? `- ${safeStr(ev.endTime)}` : ""} · 📍 {safeStr(ev.location) || "Ohne Ort"}</div>
                         </div>
+                        {canEditEvents && (
                         <div className="schedule-actions"><button className="btn btn-edit" style={{background:"#25D366", color:"white"}} onClick={()=>shareEventWhatsApp(ev)}>📲 WA</button><button className="btn btn-edit" onClick={()=>openEditEvent(ev)}>✏️</button><button className="btn btn-danger" onClick={()=>deleteEvent(ev.id)}>🗑️</button></div>
+                        )}
                       </div>
                     );
                   })}
