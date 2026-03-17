@@ -732,7 +732,8 @@ const EventCard = ({ ev: rawEv, controls=true, showDate=false, onClick=null }) =
         .bottom-nav { display: none; }
         .mobile-back-btn { display: none; }
         @media (max-width: 768px) {
-          .main-wrapper { padding: 12px 12px 100px 12px; width: 100%; overflow-x: hidden; }
+          .main-wrapper { padding: 12px 12px 100px 12px; width: 100%; max-width: 100vw; overflow-x: hidden; box-sizing: border-box; }
+.tile { padding: 16px; width: 100%; box-sizing: border-box; overflow: hidden; }
           .top-nav-links { display: none !important; }
           .header-right { margin-left: auto; }
           .bottom-nav { display: flex !important; position: fixed; bottom: 0; left: 0; width: 100%; background: ${B.white}; border-top: 1.5px solid ${B.lightGrey}; z-index: 9999; padding-bottom: max(12px, env(safe-area-inset-bottom)); justify-content: space-around; box-shadow: 0 -4px 20px rgba(0,0,0,0.08); }
@@ -760,13 +761,13 @@ const EventCard = ({ ev: rawEv, controls=true, showDate=false, onClick=null }) =
       `}</style>
 
       {/* ── HEADER ── */}
-      <header style={{background:B.white,borderBottom:`2px solid ${B.lightGrey}`,padding:"0 24px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0,boxShadow:"0 2px 12px rgba(0,0,0,.06)"}}>
+      <header style={{background:B.white,borderBottom:`2px solid ${B.lightGrey}`,padding:"0 12px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0,boxShadow:"0 2px 12px rgba(0,0,0,.06)", width:"100%", maxWidth:"100vw", boxSizing:"border-box", overflow:"hidden"}}>
         <div style={{display:"flex",alignItems:"center",gap:12,padding:"8px 0",cursor:"pointer"}} onClick={()=>{setView("home");setSelectedTeam(null);}}>
           <VereinsLogo size={40}/>
           <div>
             <div style={{display:"flex",alignItems:"baseline",gap:4}}>
               <span style={{fontSize:12,fontWeight:800,color:B.teal,letterSpacing:2}}>TV</span>
-              <span style={{fontSize:20,fontWeight:900,color:B.anthracite,letterSpacing:3,textTransform:"uppercase"}}>HINDELANG</span>
+              <span style={{fontSize:18,fontWeight:900,color:B.anthracite,letterSpacing:1,textTransform:"uppercase"}}>HINDELANG</span>
             </div>
             <div style={{fontSize:10,fontWeight:700,color:B.teal,letterSpacing:3,textTransform:"uppercase",marginTop:-2}}>FUSSBALL</div>
           </div>
@@ -814,7 +815,7 @@ const EventCard = ({ ev: rawEv, controls=true, showDate=false, onClick=null }) =
           <div style={{maxWidth:960,margin:"0 auto"}}>
             <div style={{background:`linear-gradient(135deg,${B.teal},${B.tealDark})`,borderRadius:16,padding:"24px 20px",marginBottom:24,color:B.white,position:"relative",overflow:"hidden"}}>
               <div style={{position:"absolute",right:-10,top:-30,opacity:.07,fontSize:200,lineHeight:1,pointerEvents:"none"}}>⚽</div>
-              <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:14}}><VereinsLogo size={56}/><div><div style={{fontSize:11,fontWeight:700,letterSpacing:3,opacity:.8,textTransform:"uppercase"}}>Willkommen bei</div><div style={{fontSize:30,fontWeight:900,letterSpacing:2,textTransform:"uppercase",lineHeight:1.1}}>TV Hindelang Fussball</div></div></div>
+              <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:14}}><VereinsLogo size={56}/><div style={{flex:1, minWidth:0}}><div style={{fontSize:11,fontWeight:700,letterSpacing:2,opacity:.8,textTransform:"uppercase",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>Willkommen bei</div><div style={{fontSize:26,fontWeight:900,letterSpacing:1,textTransform:"uppercase",lineHeight:1.1,wordWrap:"break-word"}}>TV Hindelang Fussball</div></div></div>
               <p style={{fontFamily:"'Barlow',sans-serif",fontSize:15,lineHeight:1.65,opacity:.92,maxWidth:580}}>{safeStr(introText)}</p>
             </div>
             <div className="grid-2">
