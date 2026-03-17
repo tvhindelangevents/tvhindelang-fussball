@@ -1167,7 +1167,9 @@ const EventCard = ({ ev: rawEv, controls=true, showDate=false, onClick=null }) =
 
             {adminSection==="news"&&canEditNews&&(
               <div>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}><div style={{fontSize:16,fontWeight:800,letterSpacing:1,textTransform:"uppercase"}}>News ({(news||[]).length})</div><button className="btn btn-primary" onClick={openAddNews}>+ News</button></div>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}><div style={{fontSize:16,fontWeight:800,letterSpacing:1,textTransform:"uppercase"}}>News ({(news||[]).filter(canManageNews).length})</div><button className="btn btn-primary" onClick={openAddNews}>+ News</button></div>
+                <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                  {(news||[]).filter(canManageNews).map(n=>{
                 <div style={{display:"flex",flexDirection:"column",gap:10}}>
                   {(news||[]).map(n=>{
                     if (!n || typeof n !== 'object') return null;
