@@ -1333,7 +1333,12 @@ const EventCard = ({ ev, controls=true, showDate=false, onClick=null }) => {
                 <div><label style={LBL}>Anzeigename</label><input className="input" placeholder="z.B. Max Mustermann" value={userForm.name} onChange={e=>setUserForm({...userForm,name:e.target.value})}/></div>
                 <div><label style={LBL}>Rolle</label>
                   <select className="input" value={userForm.role} onChange={e=>setUserForm({...userForm,role:e.target.value})}>
-                    <option value="admin">Administrator</option><option value="trainer">Trainer</option><option value="player">Aktiv (Spieler:in)</option><option value="parent">Eltern</option>
+                    <option value="admin">Administrator / Vorstand</option>
+                    <option value="trainer">Trainer:in</option>
+                    <option value="player">Spieler:in (Aktiv)</option>
+                    <option value="player_inactive">Spieler:in (Inaktiv / Passiv)</option>
+                    <option value="parent">Elternteil</option>
+                    <option value="sponsor">Sponsor / Fan</option>
                   </select>
                 </div>
               </div>
