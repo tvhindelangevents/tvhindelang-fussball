@@ -888,7 +888,8 @@ const EventCard = ({ ev, controls=true, showDate=false, onClick=null }) => {
           <div style={{maxWidth:1040,margin:"0 auto"}}>
             <h1 style={{fontSize:30,fontWeight:900,letterSpacing:2,textTransform:"uppercase",marginBottom:22}}>Mannschaften <span style={{color:B.teal}}>({teams.length})</span></h1>
             <div className="grid-2" style={{gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))"}}>
-              {teams.map(ti=>{
+              <div className="grid-2" style={{gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))"}}>
+              {[...teams].sort((a, b) => (a.sortIndex || 0) - (b.sortIndex || 0)).map(ti=>{
                 if (!ti) return null;
                 return (
                 <div key={ti.id || Math.random()} className="team-card" onClick={()=>setSelectedTeam(ti)}>
