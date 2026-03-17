@@ -928,17 +928,16 @@ const EventCard = ({ ev, controls=true, showDate=false, onClick=null }) => {
               ))}
               {selectedTeam.bfvLink && (
                 <div style={{marginTop: 24}}>
-                  <div style={{fontSize:12,fontWeight:700,letterSpacing:1,color:B.midGrey,textTransform:"uppercase",marginBottom:10}}>🏆 Livetabelle</div>
-                  <div style={{borderRadius: 10, overflow: "hidden", border: `1.5px solid ${B.lightGrey}`, background: B.white}}>
-                    <iframe 
-                      srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>body{margin:0;padding:0;background:#fff;} div[id^="bfv"]{width:100% !important;}</style></head><body>${selectedTeam.bfvLink}</body></html>`}
-                      width="100%" 
-                      height="420" 
-                      frameBorder="0" 
-                      style={{display: "block"}} 
-                      title={`Tabelle ${selectedTeam.name}`} 
-                    />
-                  </div>
+                  <a href={selectedTeam.bfvLink} target="_blank" rel="noopener noreferrer" style={{display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", background: B.offWhite, borderRadius: 12, textDecoration: "none", border: `1.5px solid ${B.lightGrey}`, transition: "all 0.2s ease"}}>
+                    <div style={{display: "flex", alignItems: "center", gap: 14}}>
+                      <div style={{fontSize: 24}}>🏆</div>
+                      <div>
+                        <div style={{fontSize: 14, fontWeight: 800, color: B.charcoal, fontFamily: "'Barlow', sans-serif"}}>Aktuelle Livetabelle</div>
+                        <div style={{fontSize: 11, color: B.midGrey, marginTop: 2}}>Beim BFV ansehen</div>
+                      </div>
+                    </div>
+                    <div style={{color: B.teal, fontWeight: 900, fontSize: 18}}>↗</div>
+                  </a>
                 </div>
               )}
              <div style={{marginTop:20}}>
