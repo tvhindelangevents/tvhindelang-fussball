@@ -550,8 +550,13 @@ export default function TVHindelangApp() {
   // --- BUS- & SICHTBARKEITS-LOGIK ENDE ---
 
   const matchesFilter = (ev) => {
-    if (!isVisibleToMe(ev)) return false;
     if (!ev) return false;
+
+    // Unser neuer Filter: Zeigt ALLES an, was einen Bus hat
+    if (filterEventType === "only_bus") {
+      return ev.bus1 || ev.bus2 || ev.type === "bus_block";
+    }
+
     const teamMatch = filterTeam === "Alle Mannschaften" || safeStr(ev.team) === safeStr(filterTeam);
     const typeMatch = filterEventType === "all" || safeStr(ev.type) === safeStr(filterEventType);
     return teamMatch && typeMatch;
@@ -571,19 +576,20 @@ export default function TVHindelangApp() {
     { id:"messages", icon:"💬", label:"Chats", badge: totalUnreadCount > 0 },
   ];
 
-const EventCard = ({ ev, controls=true, showDate=false, onClick=null }) => {
-    if (!ev) return null;
-    const t=typeOf(ev.type); const hasBus=ev.bus1||ev.bus2;
+const EventCard = ({ ev: rawEv, controls=true, showDate=false, onClick=null }) => {
+    if (!rawEv) return null;
+    const ev = getDisplayEvent(rawEv); // <-- Holt die anonyme Version für Spieler
+    const t=typeOf(ev.type); 
     const myProfile = allUsers.find(u => u.id === user?.uid); const myName = myProfile?.name || user?.email;
     const hasDeclined = Array.isArray(ev.declines) && ev.declines.includes(myName);
     const isNew = ev.createdAt?.toDate ? ev.createdAt.toDate() > new Date(Date.now() - 48 * 60 * 60 * 1000) : false;
     const myTeams = Array.isArray(myProfile?.assignedTeams) ? myProfile.assignedTeams : [];
     const canDecline = isAdmin || isTrainer || myTeams.includes(ev.team);
-    const sd = safeDateObj(ev.date); // Holt das formatierte Datum
+    const sd = safeDateObj(ev.date); 
 
     return (
       <div 
-        style={{borderLeft:`3px solid ${hasBus?BUS.color:t.color}`,background:hasBus?BUS.bg:t.bg,borderRadius:"0 8px 8px 0",padding:"11px 13px",marginBottom:10, cursor: onClick ? "pointer" : "default", transition: "transform .15s"}}
+        style={{borderLeft:`3px solid ${t.color}`,background:t.bg,borderRadius:"0 8px 8px 0",padding:"11px 13px",marginBottom:10, cursor: onClick ? "pointer" : "default", transition: "transform .15s"}}
         onClick={onClick ? () => onClick(ev) : undefined}
       >
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}} className="event-card-inner">
@@ -790,6 +796,7 @@ const EventCard = ({ ev, controls=true, showDate=false, onClick=null }) => {
           <div className="hide-scroll" style={{padding:"10px 24px",display:"flex",alignItems:"center",gap:10, borderBottom:`1px dashed ${B.lightGrey}`}}>
             <span style={{fontSize:12,fontWeight:800,color:B.midGrey,letterSpacing:1,textTransform:"uppercase",flexShrink:0}}>🏷️ Typ:</span>
             <button className="pill" style={{background:filterEventType==="all"?B.anthracite:B.offWhite,color:filterEventType==="all"?B.white:B.midGrey}} onClick={()=>setFilterEventType("all")}>Alle</button>
+            <button className="pill" style={{background:filterEventType==="only_bus"?BUS.color:B.offWhite,color:filterEventType==="only_bus"?B.white:B.midGrey, border:`1px solid ${filterEventType==="only_bus"?BUS.color:BUS.border}`}} onClick={()=>setFilterEventType("only_bus")}>🚌 Bus-Plan</button>
             {EVENT_TYPES.map(t=>(<button key={t.value} className="pill" style={{background:filterEventType===t.value?t.color:B.offWhite,color:filterEventType===t.value?B.white:B.midGrey}} onClick={()=>setFilterEventType(t.value)}>{t.label}</button>))}
           </div>
           <div className="hide-scroll" style={{padding:"8px 24px",display:"flex",alignItems:"center",gap:16}}>
@@ -887,7 +894,7 @@ const EventCard = ({ ev, controls=true, showDate=false, onClick=null }) => {
                   return (
                     <div key={day} className={`cal-day ${isToday?"today":""} ${isSel?"selected":""}`} onClick={()=>setSelectedDay(day===selectedDay?null:day)}>
                       <div style={{fontSize:12,fontWeight:700,color:isToday||isSel?B.teal:B.charcoal,marginBottom:2}}>{day}</div>
-                      {dayEvs.slice(0,3).map(ev=><div key={ev.id || Math.random()} className="event-bar" style={{background:(ev.bus1||ev.bus2)?BUS.color:typeOf(ev.type).color}} title={safeStr(ev.title)}/>)}
+                      {dayEvs.slice(0,3).map(ev=><div key={ev.id || Math.random()} className="event-bar" style={{background:typeOf(ev.type).color}} title={isAdmin ? safeStr(ev.title) : (ev.type==="bus_block" ? "Bus belegt" : safeStr(ev.title))}/>)}
                       {dayEvs.length>3&&<div style={{fontSize:9,color:B.midGrey,fontWeight:700}}>+{dayEvs.length-3}</div>}
                     </div>
                   );
@@ -915,12 +922,12 @@ const EventCard = ({ ev, controls=true, showDate=false, onClick=null }) => {
               <h1 style={{fontSize:30,fontWeight:900,letterSpacing:2,textTransform:"uppercase"}}>Spielplan & <span style={{color:B.teal}}>Termine</span></h1>{canEditEvents&&<button className="btn btn-primary" onClick={()=>openAddEvent()}>+ Neuer Termin</button>}
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:10}}>
-              {upcoming.length===0 ? <div style={{textAlign:"center",color:B.midGrey,padding:48}}>Keine Termine für diese Auswahl</div> : upcoming.map(ev=>{
-                if (!ev) return null; const t=typeOf(ev.type); const sd=safeDateObj(ev.date); const hasBus=ev.bus1||ev.bus2; const myProfile = allUsers.find(u => u.id === user?.uid); const myName = myProfile?.name || user?.email; const hasDeclined = Array.isArray(ev.declines) && ev.declines.includes(myName);
+              {upcoming.length===0 ? <div style={{textAlign:"center",color:B.midGrey,padding:48}}>Keine Termine für diese Auswahl</div> : upcoming.map(rawEv=>{
+                if (!rawEv) return null; const ev = getDisplayEvent(rawEv); const t=typeOf(ev.type); const sd=safeDateObj(ev.date); const myProfile = allUsers.find(u => u.id === user?.uid); const myName = myProfile?.name || user?.email; const hasDeclined = Array.isArray(ev.declines) && ev.declines.includes(myName);
                 return (
-                  <div key={ev.id || Math.random()} className="card schedule-grid" onMouseEnter={e=>e.currentTarget.style.borderColor=hasBus?BUS.color:t.color} onMouseLeave={e=>e.currentTarget.style.borderColor=B.lightGrey}>
-                    <div style={{textAlign:"center"}}><div style={{fontSize:24,fontWeight:900,color:hasBus?BUS.color:t.color,lineHeight:1}}>{sd.day}</div><div style={{fontSize:11,color:B.midGrey,fontWeight:700}}>{sd.month}</div></div>
-                    <div style={{width:3,background:hasBus?BUS.color:t.color,borderRadius:2,alignSelf:"stretch"}}/>
+                  <div key={ev.id || Math.random()} className="card schedule-grid" onMouseEnter={e=>e.currentTarget.style.borderColor=t.color} onMouseLeave={e=>e.currentTarget.style.borderColor=B.lightGrey}>
+                    <div style={{textAlign:"center"}}><div style={{fontSize:24,fontWeight:900,color:t.color,lineHeight:1}}>{sd.day}</div><div style={{fontSize:11,color:B.midGrey,fontWeight:700}}>{sd.month}</div></div>
+                    <div style={{width:3,background:t.color,borderRadius:2,alignSelf:"stretch"}}/>
                     <div style={{flex: 1}}>
                       <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3,flexWrap:"wrap"}}><span style={{fontWeight:800,fontSize:16}}>{safeStr(ev.title)}</span><Chip bg={t.bg} c={t.color}>{t.label}</Chip>{ev.team&&<Chip bg={B.anthracite+"11"} c={B.charcoal}>{safeStr(ev.team)}</Chip>}{ev.bus1&&<Chip bg={BUS.bg} c={BUS.color} border={`1px solid ${BUS.border}`}>🚌 Bus 1</Chip>}{ev.bus2&&<Chip bg={BUS.bg} c={BUS.color} border={`1px solid ${BUS.border}`}>🚌 Bus 2</Chip>}</div>
                       <div style={{color:B.midGrey,fontSize:12}}>⏰ {safeStr(ev.time)} {ev.endTime ? `- ${safeStr(ev.endTime)}` : ""} Uhr · 📍 {safeStr(ev.location)}</div>
