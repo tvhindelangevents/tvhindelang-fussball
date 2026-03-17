@@ -532,9 +532,16 @@ export default function TVHindelangApp() {
 
   // --- BUS- & SICHTBARKEITS-LOGIK START ---
   const isVisibleToMe = (ev) => {
-    if (!ev) return false;
-    if (ev.type === "bus_block") return isAdmin; // Nur Admins sehen reine Blockaden
-    return true;
+    return true; // Im Kalender dürfen alle Termine gesehen werden, wir anonymisieren sie aber gleich
+  };
+
+  const getDisplayEvent = (ev) => {
+    if (!ev) return null;
+    // Wenn es eine Sonderbelegung ist und der Nutzer KEIN Admin ist, verstecke die Details
+    if (ev.type === "bus_block" && !isAdmin) {
+      return { ...ev, title: "🚌 Vereinsbus belegt", location: "", notes: "", team: "" };
+    }
+    return ev;
   };
 
   const eventsOnFormDate = (events || []).filter(e => e.date === eventForm.date && e.id !== editingEvent?.id);
