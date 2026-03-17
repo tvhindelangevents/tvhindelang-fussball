@@ -165,6 +165,7 @@ export default function TVHindelangApp() {
   const [editingNews, setEditingNews]       = useState(null);
   const [newsForm, setNewsForm]             = useState({ title:"", body:"", fileUrl:"", fileName:"", fileObj:null });
   const [newsSaving, setNewsSaving]         = useState(false);
+  const [expandedNewsId, setExpandedNewsId] = useState(null);
 
   const [showTeamModal, setShowTeamModal]   = useState(false);
   const [editingTeam, setEditingTeam]       = useState(null);
@@ -867,9 +868,12 @@ const EventCard = ({ ev: rawEv, controls=true, showDate=false, onClick=null }) =
                 {news.slice(0,2).map(n=>{
                   if (!n) return null;
                   return (
-                  <div key={n.id || Math.random()} style={{padding:"10px 12px",background:B.amberLight,borderRadius:8,borderLeft:`3px solid ${B.amber}`}}>
+                  <div key={n.id || Math.random()} onClick={() => setExpandedNewsId(expandedNewsId === n.id ? null : n.id)} style={{cursor: "pointer", padding:"10px 12px",background:B.amberLight,borderRadius:8,borderLeft:`3px solid ${B.amber}`, transition: "all .2s"}}>
                     <div style={{fontWeight:800,fontSize:14,marginBottom:3}}>{safeStr(n.title)}</div>
-                    <div style={{fontSize:12,color:B.charcoal,fontFamily:"'Barlow',sans-serif",lineHeight:1.5}}>{safeStr(n.body).slice(0,90)}{safeStr(n.body).length>90?"…":""}</div>
+                    <div style={{fontSize:12,color:B.charcoal,fontFamily:"'Barlow',sans-serif",lineHeight:1.5, whiteSpace: "pre-wrap"}}>
+                      {expandedNewsId === n.id ? safeStr(n.body) : `${safeStr(n.body).slice(0,90)}${safeStr(n.body).length>90?"…":""}`}
+                      {expandedNewsId !== n.id && safeStr(n.body).length > 90 && <span style={{color: B.amber, fontWeight: 700, marginLeft: 5}}>Mehr lesen</span>}
+                    </div>
                     {n.fileUrl && n.fileUrl.startsWith("data:image") ? ( <div onClick={() => setFullscreenImage(n.fileUrl)} style={{display:"block", marginTop:8, cursor: "zoom-in"}}><img src={n.fileUrl} alt="News Anhang" style={{width:"100%", maxHeight:160, objectFit:"cover", borderRadius:6, border:`1px solid ${B.lightGrey}`}} /></div> ) : null}
                     <div style={{fontSize:10,color:B.midGrey,marginTop:6,fontWeight:600}}>{safeStr(n.date)} · {safeStr(n.author)}</div>
                   </div>
@@ -1156,15 +1160,22 @@ const EventCard = ({ ev: rawEv, controls=true, showDate=false, onClick=null }) =
                   {(news||[]).map(n=>{
                     if (!n || typeof n !== 'object') return null;
                     return (
-                    <div key={n.id || Math.random()} className="card" style={{padding:"16px 20px",borderLeft:`3px solid ${B.amber}`}}>
+                    <div key={n.id || Math.random()} className="card" onClick={() => setExpandedNewsId(expandedNewsId === n.id ? null : n.id)} style={{cursor: "pointer", padding:"16px 20px",borderLeft:`3px solid ${B.amber}`, transition: "all .2s"}}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12}} className="event-card-inner">
                         <div style={{flex:1}}>
                           <div style={{fontWeight:800,fontSize:16,marginBottom:4}}>{safeStr(n.title) || "Ohne Titel"}</div>
-                          <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif",lineHeight:1.5,marginBottom:6}}>{safeStr(n.body).slice(0,90)}{safeStr(n.body).length>90?"…":""}</div>
+                          <div style={{fontSize:13,color:B.charcoal,fontFamily:"'Barlow',sans-serif",lineHeight:1.5,marginBottom:6, whiteSpace: "pre-wrap"}}>
+                            {expandedNewsId === n.id ? safeStr(n.body) : `${safeStr(n.body).slice(0,90)}${safeStr(n.body).length>90?"…":""}`}
+                            {expandedNewsId !== n.id && safeStr(n.body).length > 90 && <span style={{color: B.amber, fontWeight: 700, marginLeft: 5}}>Mehr lesen</span>}
+                          </div>
                           {n.fileUrl && n.fileUrl.startsWith("data:image") ? ( <div onClick={() => setFullscreenImage(n.fileUrl)} style={{display:"block", marginTop:8, marginBottom:6, cursor: "zoom-in"}}><img src={n.fileUrl} alt="Anhang" style={{maxWidth:"100%", maxHeight:120, objectFit:"cover", borderRadius:6, border:`1px solid ${B.lightGrey}`}} /></div>) : null}
                           <div style={{fontSize:11,color:B.midGrey,fontWeight:600}}>{safeStr(n.date)} · {safeStr(n.author)}</div>
                         </div>
-                        <div className="event-card-actions"><button className="btn btn-edit" style={{background:"#25D366", color:"white"}} onClick={()=>shareNewsWhatsApp(n)}>📲 WA</button><button className="btn btn-edit" onClick={()=>openEditEvent(n)}>✏️</button><button className="btn btn-danger" onClick={()=>deleteNews(n.id)}>🗑️</button></div>
+                        <div className="event-card-actions">
+  <button className="btn btn-edit" style={{background:"#25D366", color:"white"}} onClick={(e)=>{e.stopPropagation(); shareNewsWhatsApp(n);}}>📲 WA</button>
+  <button className="btn btn-edit" onClick={(e)=>{e.stopPropagation(); openEditNews(n);}}>✏️</button>
+  <button className="btn btn-danger" onClick={(e)=>{e.stopPropagation(); deleteNews(n.id);}}>🗑️</button>
+</div>
                       </div>
                     </div>
                   )})}
