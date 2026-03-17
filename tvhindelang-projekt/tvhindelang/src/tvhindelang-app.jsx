@@ -692,8 +692,8 @@ const EventCard = ({ ev: rawEv, controls=true, showDate=false, onClick=null }) =
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800;900&family=Barlow:wght@400;500;600&display=swap');
         *{box-sizing:border-box;margin:0;padding:0;}
-        html, body { height: 100%; width: 100%; margin: 0; padding: 0; }
-        .app-container { display: flex; flex-direction: column; min-height: 100vh; min-height: 100dvh; }
+        html, body { height: 100%; width: 100%; margin: 0; padding: 0; overflow-x: hidden; }
+        .app-container { display: flex; flex-direction: column; min-height: 100vh; min-height: 100dvh; overflow-x: hidden; width: 100%; }
         .main-wrapper { flex: 1; overflow-y: auto; padding: 28px 24px; }
         .hide-scroll { overflow-x: auto; -ms-overflow-style: none; scrollbar-width: none; }
         .hide-scroll::-webkit-scrollbar { display: none; }
@@ -732,7 +732,7 @@ const EventCard = ({ ev: rawEv, controls=true, showDate=false, onClick=null }) =
         .bottom-nav { display: none; }
         .mobile-back-btn { display: none; }
         @media (max-width: 768px) {
-          .main-wrapper { padding: 16px 16px 100px 16px; }
+          .main-wrapper { padding: 12px 12px 100px 12px; width: 100%; overflow-x: hidden; }
           .top-nav-links { display: none !important; }
           .header-right { margin-left: auto; }
           .bottom-nav { display: flex !important; position: fixed; bottom: 0; left: 0; width: 100%; background: ${B.white}; border-top: 1.5px solid ${B.lightGrey}; z-index: 9999; padding-bottom: max(12px, env(safe-area-inset-bottom)); justify-content: space-around; box-shadow: 0 -4px 20px rgba(0,0,0,0.08); }
@@ -812,7 +812,7 @@ const EventCard = ({ ev: rawEv, controls=true, showDate=false, onClick=null }) =
         {/* ════ HOME ════ */}
         {view==="home"&&(
           <div style={{maxWidth:960,margin:"0 auto"}}>
-            <div style={{background:`linear-gradient(135deg,${B.teal},${B.tealDark})`,borderRadius:16,padding:"32px 36px",marginBottom:28,color:B.white,position:"relative",overflow:"hidden"}}>
+            <div style={{background:`linear-gradient(135deg,${B.teal},${B.tealDark})`,borderRadius:16,padding:"24px 20px",marginBottom:24,color:B.white,position:"relative",overflow:"hidden"}}>
               <div style={{position:"absolute",right:-10,top:-30,opacity:.07,fontSize:200,lineHeight:1,pointerEvents:"none"}}>⚽</div>
               <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:14}}><VereinsLogo size={56}/><div><div style={{fontSize:11,fontWeight:700,letterSpacing:3,opacity:.8,textTransform:"uppercase"}}>Willkommen bei</div><div style={{fontSize:30,fontWeight:900,letterSpacing:2,textTransform:"uppercase",lineHeight:1.1}}>TV Hindelang Fussball</div></div></div>
               <p style={{fontFamily:"'Barlow',sans-serif",fontSize:15,lineHeight:1.65,opacity:.92,maxWidth:580}}>{safeStr(introText)}</p>
