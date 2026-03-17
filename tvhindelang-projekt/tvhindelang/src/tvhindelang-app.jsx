@@ -176,6 +176,8 @@ export default function TVHindelangApp() {
 
   const [showUserModal, setShowUserModal]   = useState(false);
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
+  const [onboardingForm, setOnboardingForm] = useState({ role: "player", teamId: "" });
+  const [savingOnboarding, setSavingOnboarding] = useState(false);
   const [editingUser, setEditingUser]       = useState(null);
   const [userForm, setUserForm]             = useState({ name: "", email: "", password: "", role: "player", assignedTeams: [] });
   const [userSaving, setUserSaving]         = useState(false);
