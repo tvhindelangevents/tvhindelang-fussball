@@ -46,7 +46,7 @@ const INIT_TEAMS = [];
 const INIT_INTRO = "Die Fußballabteilung des TV Hindelang e.V. vereint alle aktiven Mannschaften. Hier findet ihr Termine, Spielpläne und Vereinsnews an einem Ort.";
 
 const emptyEvent = (date="") => ({ type:"training", title:"", date, time:"17:00", endTime:"", location:"", notes:"", team:"Herren", bus1:false, bus2:false, declines: [] });
-const emptyTeamForm = () => ({ name: "", trainers: [{ name: "", phone: "" }], training: "", jahrgang: "", bfvLinks: [] });
+const emptyTeamForm = () => ({ name: "", trainers: [{ name: "", phone: "" }], training: "", jahrgang: "", bfvLinks: [], sortIndex: 0 });
 
 const LBL = { fontSize:11, fontWeight:700, letterSpacing:1, color:B.midGrey, textTransform:"uppercase", display:"block", marginBottom:5 };
 
@@ -415,7 +415,7 @@ export default function TVHindelangApp() {
   const openEditTeam = (t) => { 
     setEditingTeam(t); let loadedTrainers = Array.isArray(t?.trainers) ? t.trainers : [];
     if (loadedTrainers.length === 0 && t?.trainer) { loadedTrainers = [{ name: t.trainer, phone: "" }]; } else if (loadedTrainers.length === 0) { loadedTrainers = [{ name: "", phone: "" }]; }
-    setTeamForm({ name: t?.name || "", trainers: loadedTrainers, training: t?.training || "", jahrgang: t?.jahrgang || "", bfvLinks: t?.bfvLinks ? t.bfvLinks : (t?.bfvLink ? [{name: "Livetabelle", url: t.bfvLink}] : []) }); setShowTeamModal(true); 
+    setTeamForm({ name: t?.name || "", trainers: loadedTrainers, training: t?.training || "", jahrgang: t?.jahrgang || "", bfvLinks: t?.bfvLinks ? t.bfvLinks : (t?.bfvLink ? [{name: "Livetabelle", url: t.bfvLink}] : []), sortIndex: t?.sortIndex || 0 }); setShowTeamModal(true); 
   };
   const saveTeam = async () => {
     if (!teamForm.name) return;
@@ -1252,9 +1252,10 @@ const EventCard = ({ ev, controls=true, showDate=false, onClick=null }) => {
             <div style={{height:4,background:`linear-gradient(90deg,${B.green},${B.teal})`,borderRadius:"4px 4px 0 0",margin:"-30px -30px 22px"}}/>
             <h2 style={{fontSize:22,fontWeight:900,letterSpacing:1,textTransform:"uppercase",marginBottom:20}}>{editingTeam?"Mannschaft bearbeiten":"Neue Mannschaft"}</h2>
             <div style={{display:"flex",flexDirection:"column",gap:13}}>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+              <div style={{display:"grid",gridTemplateColumns:"1.5fr 1fr 1fr",gap:12}}>
                 <div><label style={LBL}>Name *</label><input className="input" placeholder="z.B. G-Jugend" value={teamForm.name} onChange={e=>setTeamForm({...teamForm,name:e.target.value})}/></div>
-                <div><label style={LBL}>Jahrgang</label><input className="input" placeholder="z.B. 2021/2022" value={teamForm.jahrgang} onChange={e=>setTeamForm({...teamForm,jahrgang:e.target.value})}/></div>
+                <div><label style={LBL}>Jahrgang</label><input className="input" placeholder="z.B. 2021" value={teamForm.jahrgang} onChange={e=>setTeamForm({...teamForm,jahrgang:e.target.value})}/></div>
+                <div><label style={LBL}>Sortierung (0-99)</label><input type="number" className="input" placeholder="z.B. 10" value={teamForm.sortIndex || ""} onChange={e=>setTeamForm({...teamForm,sortIndex: Number(e.target.value) || 0})}/></div>
               </div>
               <div>
                 <label style={LBL}>Trainer & Betreuer</label>
