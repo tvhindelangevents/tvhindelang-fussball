@@ -46,7 +46,7 @@ const INIT_TEAMS = [];
 const INIT_INTRO = "Die Fußballabteilung des TV Hindelang e.V. vereint alle aktiven Mannschaften. Hier findet ihr Termine, Spielpläne und Vereinsnews an einem Ort.";
 
 const emptyEvent = (date="") => ({ type:"training", title:"", date, time:"17:00", endTime:"", location:"", notes:"", team:"Herren", bus1:false, bus2:false, declines: [] });
-const emptyTeamForm = () => ({ name: "", trainers: [{ name: "", phone: "" }], training: "", jahrgang: "" });
+const emptyTeamForm = () => ({ name: "", trainers: [{ name: "", phone: "" }], training: "", jahrgang: "", bfvLink: "" });
 
 const LBL = { fontSize:11, fontWeight:700, letterSpacing:1, color:B.midGrey, textTransform:"uppercase", display:"block", marginBottom:5 };
 
@@ -415,7 +415,7 @@ export default function TVHindelangApp() {
   const openEditTeam = (t) => { 
     setEditingTeam(t); let loadedTrainers = Array.isArray(t?.trainers) ? t.trainers : [];
     if (loadedTrainers.length === 0 && t?.trainer) { loadedTrainers = [{ name: t.trainer, phone: "" }]; } else if (loadedTrainers.length === 0) { loadedTrainers = [{ name: "", phone: "" }]; }
-    setTeamForm({ name: t?.name || "", trainers: loadedTrainers, training: t?.training || "", jahrgang: t?.jahrgang || "" }); setShowTeamModal(true); 
+    setTeamForm({ name: t?.name || "", trainers: loadedTrainers, training: t?.training || "", jahrgang: t?.jahrgang || "", bfvLink: t?.bfvLink || "" }); setShowTeamModal(true); 
   };
   const saveTeam = async () => {
     if (!teamForm.name) return;
