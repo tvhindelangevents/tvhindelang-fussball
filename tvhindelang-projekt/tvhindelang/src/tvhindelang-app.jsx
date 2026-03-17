@@ -239,6 +239,30 @@ export default function TVHindelangApp() {
     return () => unsubs.forEach(u=>u());
   }, [user]);
 
+  // --- ONBOARDING FUNKTION ---
+  const submitOnboarding = async () => {
+    if (onboardingForm.role !== "sponsor" && !onboardingForm.teamId) {
+      return alert("Bitte wähle deine Mannschaft aus!");
+    }
+    setSavingOnboarding(true);
+    
+    try {
+      const assigned = onboardingForm.role === "sponsor" ? [] : [onboardingForm.teamId]; 
+      
+      // Wir speichern die Rolle in der Datenbank ab (mit user.uid)
+      await setDoc(doc(db, "users", user.uid), {
+        role: onboardingForm.role,
+        assignedTeams: assigned,
+        name: user.displayName || user.email || "Neuer Nutzer" // Falls der Name noch fehlt
+      }, { merge: true }); // merge: true stellt sicher, dass wir nichts anderes überschreiben
+      
+      window.location.reload(); 
+    } catch (e) {
+      alert("Fehler beim Speichern. Bitte versuche es erneut: " + e.message);
+      setSavingOnboarding(false);
+    }
+  };
+
   useEffect(() => { chatEndRef.current?.scrollIntoView({behavior:"smooth"}); }, [activeThread]);
 
   const handleLogin = async () => {
