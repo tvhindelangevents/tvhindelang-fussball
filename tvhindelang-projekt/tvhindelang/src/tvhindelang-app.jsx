@@ -1238,6 +1238,21 @@ const EventCard = ({ ev, controls=true, showDate=false, onClick=null }) => {
                 <div><label style={LBL}>Typ</label><select className="input" value={eventForm.type} onChange={e=>setEventForm({...eventForm,type:e.target.value})}>{EVENT_TYPES.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}</select></div>
                 <div><label style={LBL}>Mannschaft</label><select className="input" value={eventForm.team} onChange={e=>setEventForm({...eventForm,team:e.target.value})}>{teamNames.map(t=><option key={t} value={t}>{t}</option>)}</select></div>
               </div>
+
+              {/* --- CHECKBOX START --- */}
+<div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 4, marginBottom: 10, padding: "10px", background: B.offWhite, borderRadius: "8px", border: `1.5px solid ${B.lightGrey}` }}>
+  <input 
+    type="checkbox" 
+    style={{ width: 18, height: 18, cursor: "pointer" }}
+    checked={eventForm.showInNext} 
+    onChange={e => setEventForm({ ...eventForm, showInNext: e.target.checked })} 
+  />
+  <label style={{ fontSize: 13, fontWeight: "bold", color: B.charcoal, cursor: "pointer" }}>
+    In "Nächste Termine" auf Home anzeigen?
+  </label>
+</div>
+{/* --- CHECKBOX ENDE --- */}
+              
               <div><label style={LBL}>Titel *</label><input className="input" placeholder="z.B. Heimspiel vs. SV Musterstadt" value={eventForm.title} onChange={e=>setEventForm({...eventForm,title:e.target.value})}/></div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}}>
                 <div><label style={LBL}>Datum *</label><input className="input" type="date" value={eventForm.date} onChange={e=>setEventForm({...eventForm,date:e.target.value})}/></div>
