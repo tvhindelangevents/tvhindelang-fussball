@@ -415,7 +415,7 @@ export default function TVHindelangApp() {
   const openEditTeam = (t) => { 
     setEditingTeam(t); let loadedTrainers = Array.isArray(t?.trainers) ? t.trainers : [];
     if (loadedTrainers.length === 0 && t?.trainer) { loadedTrainers = [{ name: t.trainer, phone: "" }]; } else if (loadedTrainers.length === 0) { loadedTrainers = [{ name: "", phone: "" }]; }
-    setTeamForm({ name: t?.name || "", trainers: loadedTrainers, training: t?.training || "", jahrgang: t?.jahrgang || "", bfvLinks: t?.bfvLinks || [] }); setShowTeamModal(true); 
+    setTeamForm({ name: t?.name || "", trainers: loadedTrainers, training: t?.training || "", jahrgang: t?.jahrgang || "", bfvLinks: t?.bfvLinks ? t.bfvLinks : (t?.bfvLink ? [{name: "Livetabelle", url: t.bfvLink}] : []) }); setShowTeamModal(true); 
   };
   const saveTeam = async () => {
     if (!teamForm.name) return;
