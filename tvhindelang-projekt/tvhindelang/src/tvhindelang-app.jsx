@@ -147,6 +147,7 @@ export default function TVHindelangApp() {
   const [threads, setThreads] = useState([]);
   const [allUsers, setAllUsers] = useState([]); 
   const [introText, setIntroText] = useState(INIT_INTRO);
+  const [kunstrasenData, setKunstrasenData] = useState(null);
   const [dataLoaded, setDataLoaded] = useState(false);
 
   const [view, setView]             = useState("home");
