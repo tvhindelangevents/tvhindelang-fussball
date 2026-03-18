@@ -1512,7 +1512,6 @@ const EventCard = ({ ev: rawEv, controls=true, showDate=false, onClick=null }) =
                     {teams.map(t => <option key={t.id} value={t.id}>{safeStr(t.name)}</option>)}
                   </select>
                 </div>
-              </div>
               )}
 
               <button className="btn btn-primary" style={{marginTop:8, width:"100%"}} onClick={submitOnboarding} disabled={savingOnboarding}>
