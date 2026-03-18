@@ -275,6 +275,7 @@ export default function TVHindelangApp() {
       await setDoc(doc(db, "users", user.uid), {
         role: onboardingForm.role,
         assignedTeams: assigned,
+        needsOnboarding: false,
         name: user.displayName || user.email || "Neuer Nutzer" // Falls der Name noch fehlt
       }, { merge: true }); // merge: true stellt sicher, dass wir nichts anderes überschreiben
       
@@ -299,7 +300,7 @@ export default function TVHindelangApp() {
     if (!registerName.trim()) { setLoginError("Bitte gib deinen Namen an."); setLoginLoading(false); return; }
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, loginEmail, loginPassword);
-      await setDoc(doc(db, "users", userCredential.user.uid), { email: loginEmail, name: registerName, role: "player", assignedTeams: [], createdAt: serverTimestamp() });
+      await setDoc(doc(db, "users", userCredential.user.uid), { email: loginEmail, name: registerName, role: "player", assignedTeams: [], needsOnboarding: true, createdAt: serverTimestamp() });
       setLoginEmail(""); setLoginPassword(""); setRegisterName("");
     } catch (e) {
       if (e.code === 'auth/email-already-in-use') setLoginError("Diese E-Mail ist bereits registriert.");
@@ -1481,6 +1482,47 @@ const EventCard = ({ ev: rawEv, controls=true, showDate=false, onClick=null }) =
         </div>
       )}
 
+{/* ════ ONBOARDING MODAL ════ */}
+      {myProfileObj?.needsOnboarding && (
+        <div className="modal-bg" style={{zIndex: 9999, background: "rgba(0,0,0,0.9)"}}>
+          <div className="modal" style={{maxWidth: 400}}>
+            <div style={{display:"flex", flexDirection:"column", alignItems:"center", marginBottom: 20}}>
+              <VereinsLogo size={50}/>
+              <h2 style={{fontSize:22,fontWeight:900,letterSpacing:1,textTransform:"uppercase",marginTop:12}}>Willkommen!</h2>
+              <div style={{fontSize:13,color:B.midGrey,textAlign:"center",marginTop:4}}>Bevor es losgeht, richte kurz dein Profil ein.</div>
+            </div>
+
+            <div style={{display:"flex",flexDirection:"column",gap:16}}>
+              <div>
+                <label style={LBL}>Wer bist du?</label>
+                <select className="input" value={onboardingForm.role} onChange={e=>setOnboardingForm({...onboardingForm, role:e.target.value})}>
+                  <option value="player">Spieler:in (Aktiv)</option>
+                  <option value="trainer">Trainer:in</option>
+                  <option value="parent">Elternteil</option>
+                  <option value="player_inactive">Spieler:in (Inaktiv / Passiv)</option>
+                  <option value="sponsor">Sponsor / Fan</option>
+                </select>
+              </div>
+
+              {onboardingForm.role !== "sponsor" && onboardingForm.role !== "player_inactive" && (
+                <div>
+                  <label style={LBL}>Deine Mannschaft</label>
+                  <select className="input" value={onboardingForm.teamId} onChange={e=>setOnboardingForm({...onboardingForm, teamId:e.target.value})}>
+                    <option value="">Bitte wählen...</option>
+                    {teams.map(t => <option key={t.id} value={t.id}>{safeStr(t.name)}</option>)}
+                  </select>
+                </div>
+              </div>
+              )}
+
+              <button className="btn btn-primary" style={{marginTop:8, width:"100%"}} onClick={submitOnboarding} disabled={savingOnboarding}>
+                {savingOnboarding ? "Speichert..." : "Los geht's!"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
       {/* ════ APP-DATENSCHUTZ MODAL ════ */}
      {/* ════ APP-DATENSCHUTZ MODAL ════ */}
       {showPrivacyModal && (
