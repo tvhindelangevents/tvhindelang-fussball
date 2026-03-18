@@ -943,9 +943,9 @@ const EventCard = ({ ev: rawEv, controls=true, showDate=false, onClick=null }) =
         {view==="calendar"&&(
           <div className="cal-layout">
             <div>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}>
-                <h1 style={{fontSize:30,fontWeight:900,letterSpacing:2,textTransform:"uppercase"}}>{MONTHS[month]} <span style={{color:B.teal}}>{year}</span></h1>
-                <div style={{display:"flex",gap:8}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18, flexWrap:"wrap", gap:12}}>
+                    <h1 style={{fontSize:30,fontWeight:900,letterSpacing:2,textTransform:"uppercase"}}>{MONTHS[month]} <span style={{color:B.teal}}>{year}</span></h1>
+                    <div style={{display:"flex",gap:8, flexWrap:"wrap"}}>
                  {kunstrasenData?.fileUrl && (
                     <button className="btn btn-ghost" style={{color: B.green, border: `1px solid ${B.green}`, background: B.greenLight, display:"flex", alignItems:"center", gap:6}} onClick={() => {
                       if (kunstrasenData.fileUrl.startsWith("data:image")) { 
