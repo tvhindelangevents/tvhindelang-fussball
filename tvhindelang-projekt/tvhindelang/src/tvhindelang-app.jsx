@@ -1008,8 +1008,8 @@ const EventCard = ({ ev: rawEv, controls=true, showDate=false, onClick=null }) =
                   <div key={ev.id || Math.random()} className="card schedule-grid" onMouseEnter={e=>e.currentTarget.style.borderColor=t.color} onMouseLeave={e=>e.currentTarget.style.borderColor=B.lightGrey}>
                     <div style={{textAlign:"center"}}><div style={{fontSize:24,fontWeight:900,color:t.color,lineHeight:1}}>{sd.day}</div><div style={{fontSize:11,color:B.midGrey,fontWeight:700}}>{sd.month}</div></div>
                     <div style={{width:3,background:t.color,borderRadius:2,alignSelf:"stretch"}}/>
-                    <div style={{flex: 1, minWidth: 0}}>
-                      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3,flexWrap:"wrap"}}><span style={{fontWeight:800,fontSize:16,wordBreak:"break-word"}}>{safeStr(ev.title)}</span>
+                   <div style={{flex: 1, minWidth: 0}}>
+                      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3,flexWrap:"wrap"}}><span style={{fontWeight:800,fontSize:16,wordBreak:"break-word"}}>{safeStr(ev.title)}</span><Chip bg={t.bg} c={t.color}>{t.label}</Chip>{ev.team&&<Chip bg={B.anthracite+"11"} c={B.charcoal}>{safeStr(ev.team)}</Chip>}{ev.bus1&&<Chip bg={BUS.bg} c={BUS.color} border={`1px solid ${BUS.border}`}>🚌 Bus 1</Chip>}{ev.bus2&&<Chip bg={BUS.bg} c={BUS.color} border={`1px solid ${BUS.border}`}>🚌 Bus 2</Chip>}</div>
                       <div style={{color:B.midGrey,fontSize:12}}>⏰ {safeStr(ev.time)} {ev.endTime ? `- ${safeStr(ev.endTime)}` : ""} Uhr · 📍 {safeStr(ev.location)}</div>
                       {ev.notes&&<div style={{fontSize:12,color:B.charcoal,marginTop:2,fontStyle:"italic",fontFamily:"'Barlow',sans-serif"}}>{safeStr(ev.notes)}</div>}
                       {canManageEvent(ev) && Array.isArray(ev.declines) && ev.declines.length > 0 && (<div style={{marginTop: 6, fontSize: 12, color: B.red, fontFamily:"'Barlow',sans-serif"}}><strong>❌ {ev.declines.length} Absage(n):</strong> {ev.declines.filter(n=>typeof n==='string').join(", ")}</div>)}
@@ -1217,12 +1217,12 @@ const EventCard = ({ ev: rawEv, controls=true, showDate=false, onClick=null }) =
                 <div style={{display:"flex",flexDirection:"column",gap:8}}>
                   {[...(events||[])].filter(canManageEvent).sort((a,b)=>safeStr(a?.date).localeCompare(safeStr(b?.date))).map(ev=>{
                     if (!ev || typeof ev !== 'object') return null; const t=typeOf(ev.type); const sd = safeDateObj(ev.date);
-                    return (
+                   return (
                       <div key={ev.id || Math.random()} className="card schedule-grid">
                         <div style={{textAlign:"center"}}><div style={{fontSize:20,fontWeight:900,color:t.color,lineHeight:1}}>{sd.day}</div><div style={{fontSize:10,color:B.midGrey,fontWeight:700}}>{sd.month} {sd.year}</div></div>
                         <div style={{width:3,background:t.color,borderRadius:2,alignSelf:"stretch"}}/>
                         <div style={{flex: 1, minWidth: 0}}>
-                          <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:3}}><span style={{fontWeight:800,fontSize:14,wordBreak:"break-word"}}>{safeStr(ev.title) || "Ohne Titel"}</span>
+                          <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:3}}><span style={{fontWeight:800,fontSize:14,wordBreak:"break-word"}}>{safeStr(ev.title) || "Ohne Titel"}</span><Chip bg={t.bg} c={t.color}>{safeStr(t.label)}</Chip><Chip bg={B.anthracite+"11"} c={B.charcoal}>{safeStr(ev.team) || "Kein Team"}</Chip></div>
                           <div style={{fontSize:12,color:B.midGrey}}>⏰ {safeStr(ev.time)} {ev.endTime ? `- ${safeStr(ev.endTime)}` : ""} · 📍 {safeStr(ev.location) || "Ohne Ort"}</div>
                         </div>
                         {canEditEvents && (
