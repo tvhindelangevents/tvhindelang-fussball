@@ -526,9 +526,14 @@ export default function TVHindelangApp() {
 
   const visibleThreads = (threads || []).filter(th => {
     if (!th) return false;
+    
+    // Wir holen uns das Profil frisch und zwingen die App, auf die echte DB-Rolle zu schauen
+    const myProfile = allUsers.find(u => u.id === user?.uid);
+    const isReallyAdmin = myProfile?.role === "admin"; 
+    const myTeams = Array.isArray(myProfile?.assignedTeams) ? myProfile.assignedTeams : [];
+    
     if (th.type === "group") {
-      if (isAdmin) return true; const myProfile = allUsers.find(u => u.id === user?.uid);
-      const myTeams = Array.isArray(myProfile?.assignedTeams) ? myProfile.assignedTeams : [];
+      if (isReallyAdmin) return true; 
       return myTeams.includes(th.team); 
     }
     if (th.type === "direct") return Array.isArray(th.participants) ? th.participants.includes(user?.uid) : false;
@@ -953,7 +958,9 @@ const EventCard = ({ ev: rawEv, controls=true, showDate=false, onClick=null }) =
                       {canManageEvent(ev) && Array.isArray(ev.declines) && ev.declines.length > 0 && (<div style={{marginTop: 6, fontSize: 12, color: B.red, fontFamily:"'Barlow',sans-serif"}}><strong>❌ {ev.declines.length} Absage(n):</strong> {ev.declines.filter(n=>typeof n==='string').join(", ")}</div>)}
                     </div>
                     <div className="schedule-actions">
-                      <button className="btn btn-ghost" style={{padding:"5px 10px", fontSize:11, color: hasDeclined ? B.charcoal : B.red, background: hasDeclined ? B.lightGrey : B.redLight}} onClick={()=>toggleDecline(ev)}>{hasDeclined ? "✅ Doch dabei" : "❌ Ich fehle"}</button>
+                      {(isAdmin || isTrainer || (Array.isArray(myProfile?.assignedTeams) ? myProfile.assignedTeams : []).includes(ev.team)) && (
+                        <button className="btn btn-ghost" style={{padding:"5px 10px", fontSize:11, color: hasDeclined ? B.charcoal : B.red, background: hasDeclined ? B.lightGrey : B.redLight}} onClick={()=>toggleDecline(ev)}>{hasDeclined ? "✅ Doch dabei" : "❌ Ich fehle"}</button>
+                      )}
                       {canManageEvent(ev)&&<div style={{display:"flex",gap:6}}><button className="btn btn-edit" style={{background:"#25D366", color:"white"}} onClick={()=>shareEventWhatsApp(ev)}>📲 WA</button><button className="btn btn-edit" onClick={()=>openEditEvent(ev)}>✏️</button><button className="btn btn-danger" onClick={()=>deleteEvent(ev.id)}>🗑️</button></div>}
                     </div>
                   </div>
