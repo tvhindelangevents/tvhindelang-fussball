@@ -1478,7 +1478,7 @@ const EventCard = ({ ev: rawEv, controls=true, showDate=false, onClick=null }) =
               ))}
             </div>
             {newThreadType==="group"
-              ? <div><label style={LBL}>Mannschaft</label><select className="input" value={newThreadTeam} onChange={e=>setNewThreadTeam(e.target.value)}>{teams.map(t=>{ if (!t) return null; return <option key={t.id} value={t.name}>{safeStr(t.name)}</option> })}</select></div>
+              ? <div><label style={LBL}>Mannschaft</label><select className="input" value={newThreadTeam} onChange={e=>setNewThreadTeam(e.target.value)}><option value="">Bitte wählen...</option>{teams.filter(t => isAdmin || myTeams.includes(safeStr(t?.name))).map(t=>{ if (!t) return null; return <option key={t.id} value={t.name}>{safeStr(t.name)}</option> })}</select></div>
               : <div><label style={LBL}>Empfänger</label><select className="input" value={newThreadRecipientId} onChange={e=>setNewThreadRecipientId(e.target.value)}><option value="">Bitte wählen...</option>{allUsers.filter(u => u && u.id !== user?.uid).map(u => ( <option key={u.id} value={u.id}>{safeStr(u.name || u.email)}</option> ))}</select></div>
             }
             <div style={{display:"flex",gap:10,marginTop:16}}>
