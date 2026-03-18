@@ -524,6 +524,28 @@ export default function TVHindelangApp() {
     setShowNewThread(false); setNewThreadRecipientId("");
   };
 
+const deleteThread = async (th) => {
+    if (!isAdmin) return alert("Nur Admins dürfen komplette Chats löschen.");
+    if(window.confirm("Möchtest du diesen Chat und alle Nachrichten darin wirklich komplett löschen?")) {
+      await deleteDoc(doc(db, "threads", th.id));
+      if(activeThread?.id === th.id) setActiveThread(null);
+    }
+  };
+
+  const deleteMessage = async (msgIndex) => {
+    const msg = activeThread.messages[msgIndex];
+    const myProfile = allUsers.find(u => u.id === user.uid);
+    const isMe = msg.from === (myProfile?.name || user.email);
+    
+    if (!isAdmin && !isMe) return alert("Du darfst nur deine eigenen Nachrichten löschen.");
+    
+    if(window.confirm("Nachricht löschen?")) {
+      const updated = activeThread.messages.filter((_, i) => i !== msgIndex);
+      await updateDoc(doc(db, "threads", activeThread.id), { messages: updated });
+      setActiveThread({...activeThread, messages: updated});
+    }
+  };
+  
   const visibleThreads = (threads || []).filter(th => {
     if (!th) return false;
     
@@ -907,7 +929,7 @@ const EventCard = ({ ev: rawEv, controls=true, showDate=false, onClick=null }) =
             <div>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}>
                 <h1 style={{fontSize:30,fontWeight:900,letterSpacing:2,textTransform:"uppercase"}}>{MONTHS[month]} <span style={{color:B.teal}}>{year}</span></h1>
-                <div style={{display:"flex",gap:8}}><button className="btn btn-ghost" onClick={()=>setCurrentDate(new Date(year,month-1,1))}>◀</button><button className="btn btn-ghost" onClick={()=>setCurrentDate(new Date(year,month+1,1))}>▶</button>{canEditEvents&&<button className="btn btn-primary" onClick={()=>openAddEvent()}>+ Termin</button>}</div>
+                <div style={{display:"flex",gap:8}}><button className="btn btn-ghost" onClick={()=>{const n=new Date();setCurrentDate(n);setSelectedDay(n.getDate());}}>Heute</button><button className="btn btn-ghost" onClick={()=>setCurrentDate(new Date(year,month-1,1))}>◀</button><button className="btn btn-ghost" onClick={()=>setCurrentDate(new Date(year,month+1,1))}>▶</button>{canEditEvents&&<button className="btn btn-primary" onClick={()=>openAddEvent()}>+ Termin</button>}</div>
               </div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:5,marginBottom:5}}>{DAYS.map(d=><div key={d} style={{textAlign:"center",fontSize:11,fontWeight:700,letterSpacing:2,color:B.midGrey}}>{d}</div>)}</div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:5}}>
@@ -1088,7 +1110,8 @@ const EventCard = ({ ev: rawEv, controls=true, showDate=false, onClick=null }) =
                     <div style={{padding:"14px 20px",borderBottom:`1.5px solid ${B.lightGrey}`,display:"flex",alignItems:"center",gap:12,background:B.white,flexShrink:0}}>
                       <button className="mobile-back-btn" onClick={() => setActiveThread(null)}>←</button>
                       <div style={{width:38,height:38,borderRadius:activeThread.type==="group"?"10px":"50%",background:`linear-gradient(135deg,${B.teal},${B.tealDark})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,color:"white",fontWeight:800}}>{activeThread.type==="group"?"👥":safeStr(activeThread.label).slice(0,2).toUpperCase()}</div>
-                      <div><div style={{fontWeight:800,fontSize:15}}>{activeThread.type === "direct" ? safeStr(allUsers.find(u => u.id === (Array.isArray(activeThread.participants) ? activeThread.participants.find(id => id !== user.uid) : user.uid))?.name || "Benutzer") : safeStr(activeThread.label)}</div><div style={{fontSize:11,color:B.midGrey}}>{activeThread.type==="group"?`Gruppen-Chat · ${safeStr(activeThread.team)}`:"Direktnachricht"}</div></div>
+                      <div style={{flex: 1, minWidth: 0}}><div style={{fontWeight:800,fontSize:15}}>{activeThread.type === "direct" ? safeStr(allUsers.find(u => u.id === (Array.isArray(activeThread.participants) ? activeThread.participants.find(id => id !== user.uid) : user.uid))?.name || "Benutzer") : safeStr(activeThread.label)}</div><div style={{fontSize:11,color:B.midGrey}}>{activeThread.type==="group"?`Gruppen-Chat · ${safeStr(activeThread.team)}`:"Direktnachricht"}</div></div>
+                      {isAdmin && <button className="btn btn-danger" style={{padding:"6px 10px"}} onClick={()=>deleteThread(activeThread)}>🗑️</button>}
                     </div>
                     <div style={{flex:1,overflow:"auto",padding:20,display:"flex",flexDirection:"column",gap:10,background:B.offWhite}}>
                       {(!Array.isArray(activeThread.messages)||activeThread.messages.length===0)&&<div style={{textAlign:"center",color:B.midGrey,padding:"40px 0",fontSize:14}}>Noch keine Nachrichten</div>}
@@ -1097,7 +1120,11 @@ const EventCard = ({ ev: rawEv, controls=true, showDate=false, onClick=null }) =
                         return (
                           <div key={i} style={{display:"flex",flexDirection:"column",alignItems:isMe?"flex-end":"flex-start"}}>
                             {!isMe&&<div style={{fontSize:11,color:B.midGrey,marginBottom:2,fontWeight:600}}>{safeStr(msg.from)}</div>}
-                            <div className={isMe?"chat-me":"chat-them"}>{safeStr(msg.text)}</div><div style={{fontSize:10,color:B.midGrey,marginTop:3}}>{safeStr(msg.time)}</div>
+                            <div style={{display:"flex", alignItems:"center", gap: 6, flexDirection: isMe ? "row" : "row-reverse"}}>
+                              {(isMe || isAdmin) && <button onClick={() => deleteMessage(i)} style={{background:"none",border:"none",cursor:"pointer",fontSize:13,opacity:0.4,padding:4,transition:"opacity .2s"}} title="Nachricht löschen" onMouseEnter={e=>e.currentTarget.style.opacity=1} onMouseLeave={e=>e.currentTarget.style.opacity=0.4}>🗑️</button>}
+                              <div className={isMe?"chat-me":"chat-them"}>{safeStr(msg.text)}</div>
+                            </div>
+                            <div style={{fontSize:10,color:B.midGrey,marginTop:3}}>{safeStr(msg.time)}</div>
                           </div>
                         );
                       })}
