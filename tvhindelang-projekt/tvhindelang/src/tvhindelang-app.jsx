@@ -1214,6 +1214,7 @@ const EventCard = ({ ev: rawEv, controls=true, showDate=false, onClick=null }) =
                   <div style={{fontSize:16,fontWeight:800,letterSpacing:1,textTransform:"uppercase"}}>Termine ({(events||[]).filter(canManageEvent).length})</div>
                   <div style={{display:"flex", gap: 10}}><input type="file" accept=".csv" style={{display: "none"}} ref={csvInputRef} onChange={handleCSVUpload} /><button className="btn btn-ghost" onClick={() => csvInputRef.current?.click()} disabled={isImporting}>{isImporting ? "⏳ Lädt..." : "📥 CSV"}</button><button className="btn btn-primary" onClick={()=>openAddEvent()}>+ Termin</button></div>
                 </div>
+                
                 <div style={{display:"flex",flexDirection:"column",gap:8}}>
                   {[...(events||[])].filter(canManageEvent).sort((a,b)=>safeStr(a?.date).localeCompare(safeStr(b?.date))).map(ev=>{
                     if (!ev || typeof ev !== 'object') return null; const t=typeOf(ev.type); const sd = safeDateObj(ev.date);
