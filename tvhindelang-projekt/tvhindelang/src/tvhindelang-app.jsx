@@ -249,6 +249,7 @@ export default function TVHindelangApp() {
     unsubs.push(onSnapshot(collection(db,"threads"), snap => setThreads(snap.docs.map(d=>({id:d.id,...d.data(),messages:d.data().messages||[]})))));
     unsubs.push(onSnapshot(collection(db,"users"), snap => setAllUsers(snap.docs.map(d=>({id:d.id,...d.data()})))));
     unsubs.push(onSnapshot(doc(db,"settings","intro"), snap => { if (snap.exists()) setIntroText(snap.data().text || INIT_INTRO); }));
+    unsubs.push(onSnapshot(doc(db,"settings","kunstrasen"), snap => { if (snap.exists()) setKunstrasenData(snap.data()); }));
     setDataLoaded(true);
     return () => unsubs.forEach(u=>u());
   }, [user]);
@@ -499,6 +500,19 @@ export default function TVHindelangApp() {
 
   const saveIntro = async (text) => { await setDoc(doc(db,"settings","intro"), { text }); };
 
+  const handlePlanUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 700000) return alert("Die Datei ist zu groß (max. 700 KB). Bitte speichere die Excel-Liste als kleinere PDF oder mache einen Screenshot.");
+    
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      await setDoc(doc(db, "settings", "kunstrasen"), { fileUrl: event.target.result });
+      alert("Kunstrasen-Plan erfolgreich hochgeladen!");
+    };
+    reader.readAsDataURL(file);
+  };
+
   const openChat = async (th) => { setActiveThread(th); if (user && th?.id) { await updateDoc(doc(db, "threads", th.id), { [`readReceipts.${user.uid}`]: Date.now() }); } };
 
   const sendMessage = async () => {
@@ -681,6 +695,7 @@ const EventCard = ({ ev: rawEv, controls=true, showDate=false, onClick=null }) =
     if (canEditNews) tabs.push({ id: "news", label: "📢 News" });
     if (isAdmin) tabs.push({ id: "users", label: "👤 Benutzer" });
     if (isAdmin) tabs.push({ id: "intro", label: "🏠 Startseite" });
+    if (isAdmin) tabs.push({ id: "kunstrasen", label: "🌿 Kunstrasen" });
     return tabs;
   };
 
@@ -929,7 +944,18 @@ const EventCard = ({ ev: rawEv, controls=true, showDate=false, onClick=null }) =
             <div>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}>
                 <h1 style={{fontSize:30,fontWeight:900,letterSpacing:2,textTransform:"uppercase"}}>{MONTHS[month]} <span style={{color:B.teal}}>{year}</span></h1>
-                <div style={{display:"flex",gap:8}}><button className="btn btn-ghost" onClick={()=>{const n=new Date();setCurrentDate(n);setSelectedDay(n.getDate());}}>Heute</button><button className="btn btn-ghost" onClick={()=>setCurrentDate(new Date(year,month-1,1))}>◀</button><button className="btn btn-ghost" onClick={()=>setCurrentDate(new Date(year,month+1,1))}>▶</button>{canEditEvents&&<button className="btn btn-primary" onClick={()=>openAddEvent()}>+ Termin</button>}</div>
+                <div style={{display:"flex",gap:8}}>
+                  {kunstrasenData?.fileUrl && (
+                    <button className="btn btn-ghost" style={{color: B.green, border: `1px solid ${B.green}`, background: B.greenLight, display:"flex", alignItems:"center", gap:6}} onClick={() => {
+                      if (kunstrasenData.fileUrl.startsWith("data:image")) { setFullscreenImage(kunstrasenData.fileUrl); } 
+                      else { const link = document.createElement('a'); link.href = kunstrasenData.fileUrl; link.download = "Kunstrasenplan"; link.click(); }
+                    }}>🌿 Kunstrasen</button>
+                  )}
+                  <button className="btn btn-ghost" onClick={()=>{const n=new Date();setCurrentDate(n);setSelectedDay(n.getDate());}}>Heute</button>
+                  <button className="btn btn-ghost" onClick={()=>setCurrentDate(new Date(year,month-1,1))}>◀</button>
+                  <button className="btn btn-ghost" onClick={()=>setCurrentDate(new Date(year,month+1,1))}>▶</button>
+                  {canEditEvents&&<button className="btn btn-primary" onClick={()=>openAddEvent()}>+ Termin</button>}
+                </div>
               </div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:5,marginBottom:5}}>{DAYS.map(d=><div key={d} style={{textAlign:"center",fontSize:11,fontWeight:700,letterSpacing:2,color:B.midGrey}}>{d}</div>)}</div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:5}}>
@@ -1268,6 +1294,18 @@ const EventCard = ({ ev: rawEv, controls=true, showDate=false, onClick=null }) =
             )}
           </div>
         )}
+
+        {adminSection==="kunstrasen"&&isAdmin&&(
+              <div style={{maxWidth:640}}>
+                <div style={{fontSize:16,fontWeight:800,letterSpacing:1,textTransform:"uppercase",marginBottom:16}}>🌿 Kunstrasen-Plan</div>
+                <div className="card" style={{padding:24}}>
+                  <label style={LBL}>Aktuellen Plan hochladen (PDF oder Bild)</label>
+                  <input className="input" type="file" accept="application/pdf,image/*" onChange={handlePlanUpload} />
+                  {kunstrasenData?.fileUrl && <div style={{marginTop: 12, fontSize: 13, color: B.green, fontWeight: 700}}>✓ Aktuell ist ein Plan für alle Nutzer sichtbar hinterlegt.</div>}
+                  {kunstrasenData?.fileUrl && <button className="btn btn-danger" style={{marginTop: 12, fontSize: 11, padding: "6px 12px"}} onClick={() => { if(window.confirm("Plan löschen?")) setDoc(doc(db, "settings", "kunstrasen"), {}); }}>Plan löschen</button>}
+                </div>
+              </div>
+            )}
 
         {/* ── FOOTER ── */}
         <div style={{ textAlign: "center", padding: "60px 24px 20px", marginTop: "auto" }}>
