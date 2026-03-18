@@ -946,10 +946,18 @@ const EventCard = ({ ev: rawEv, controls=true, showDate=false, onClick=null }) =
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}>
                 <h1 style={{fontSize:30,fontWeight:900,letterSpacing:2,textTransform:"uppercase"}}>{MONTHS[month]} <span style={{color:B.teal}}>{year}</span></h1>
                 <div style={{display:"flex",gap:8}}>
-                  {kunstrasenData?.fileUrl && (
+                 {kunstrasenData?.fileUrl && (
                     <button className="btn btn-ghost" style={{color: B.green, border: `1px solid ${B.green}`, background: B.greenLight, display:"flex", alignItems:"center", gap:6}} onClick={() => {
-                      if (kunstrasenData.fileUrl.startsWith("data:image")) { setFullscreenImage(kunstrasenData.fileUrl); } 
-                      else { const link = document.createElement('a'); link.href = kunstrasenData.fileUrl; link.download = "Kunstrasenplan"; link.click(); }
+                      if (kunstrasenData.fileUrl.startsWith("data:image")) { 
+                        setFullscreenImage(kunstrasenData.fileUrl); 
+                      } else { 
+                        const parts = kunstrasenData.fileUrl.split(';base64,');
+                        const raw = window.atob(parts[1]);
+                        const uInt8Array = new Uint8Array(raw.length);
+                        for (let i = 0; i < raw.length; ++i) uInt8Array[i] = raw.charCodeAt(i);
+                        const blob = new Blob([uInt8Array], { type: 'application/pdf' });
+                        window.open(URL.createObjectURL(blob), '_blank');
+                      }
                     }}>🌿 Kunstrasen</button>
                   )}
                   <button className="btn btn-ghost" onClick={()=>{const n=new Date();setCurrentDate(n);setSelectedDay(n.getDate());}}>Heute</button>
