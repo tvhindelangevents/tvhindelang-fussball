@@ -750,6 +750,19 @@ const EventCard = ({ ev: rawEv, controls=true, showDate=false, onClick=null }) =
           <button className="btn btn-primary" style={{marginTop:4}} onClick={isRegisterMode ? handleRegister : handleLogin} disabled={loginLoading||!loginEmail||!loginPassword||(isRegisterMode&&!registerName)}>
             {loginLoading ? "Bitte warten..." : (isRegisterMode ? "Konto erstellen" : "Einloggen")}
           </button>
+          
+          {/* HIER IST DER NEUE PASSWORT-VERGESSEN-LINK */}
+          {!isRegisterMode && (
+            <div style={{textAlign: "center", marginTop: 16}}>
+              <span 
+                style={{color: "#888", fontSize: 13, cursor: "pointer", textDecoration: "underline", fontFamily:"'Barlow',sans-serif"}} 
+                onClick={handlePasswordReset}
+              >
+                Passwort vergessen?
+              </span>
+            </div>
+          )}
+
         </div>
         <div style={{marginTop:24,fontSize:13,color:B.teal,fontWeight:700,fontFamily:"'Barlow',sans-serif",textAlign:"center",cursor:"pointer",textDecoration:"underline"}} onClick={() => { setIsRegisterMode(!isRegisterMode); setLoginError(""); }}>
           {isRegisterMode ? "Bereits ein Konto? Hier einloggen" : "Noch kein Konto? Hier registrieren"}
