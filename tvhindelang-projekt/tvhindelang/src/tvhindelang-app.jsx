@@ -985,7 +985,33 @@ const EventCard = ({ ev: rawEv, controls=true, showDate=false, onClick=null }) =
               {selectedDay ? (
                 <>
                   <div style={{marginBottom:16}}><div style={{fontSize:20,fontWeight:900}}>{selectedDay}. {MONTHS[month]} {year}</div><div style={{fontSize:12,color:B.midGrey,marginTop:2}}>{selectedEvs.length} Termin{selectedEvs.length!==1?"e":""}</div></div>
-                  {selectedEvs.length===0 ? <div style={{textAlign:"center",color:B.midGrey,padding:"24px 0",fontSize:14,fontFamily:"'Barlow',sans-serif"}}>Keine Termine an diesem Tag</div> : selectedEvs.map(ev=><EventCard key={ev.id || Math.random()} ev={ev}/>)}
+                  {selectedEvs.length===0 ? <div style={{textAlign:"center",color:B.midGrey,padding:"24px 0",fontSize:14,fontFamily:"'Barlow',sans-serif"}}>Keine Termine an diesem Tag</div> : (
+                    <div style={{ position: "relative", paddingLeft: 24, marginTop: 12 }}>
+                      {/* Die feine vertikale Linie */}
+                      <div style={{ position: "absolute", left: 8, top: 6, bottom: 0, width: 2, background: B.tealLight }} />
+                      
+                      {/* Termine nach Uhrzeit gruppieren und sortieren */}
+                      {Array.from(new Set(selectedEvs.map(e => e.time || "00:00"))).sort().map(time => {
+                        const evsAtTime = selectedEvs.filter(e => (e.time || "00:00") === time);
+                        return (
+                          <div key={time} style={{ position: "relative", marginBottom: 20 }}>
+                            {/* Der Punkt auf der Zeitleiste */}
+                            <div style={{ position: "absolute", left: -21, top: 3, width: 12, height: 12, borderRadius: "50%", background: B.teal, border: `2px solid ${B.white}` }} />
+                            
+                            {/* Die Uhrzeit-Überschrift */}
+                            <div style={{ fontSize: 13, fontWeight: 900, color: B.tealDark, marginBottom: 8, letterSpacing: 1 }}>
+                              {time === "00:00" ? "Ganztägig / Keine Zeit" : `${time} Uhr`}
+                            </div>
+                            
+                            {/* Alle Termine, die zu dieser Uhrzeit starten */}
+                            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                              {evsAtTime.map(ev => <EventCard key={ev.id || Math.random()} ev={ev} />)}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                   {canEditEvents&&<button className="btn btn-primary" style={{width:"100%",marginTop:8}} onClick={()=>openAddEvent(selectedStr)}>+ Termin hinzufügen</button>}
                 </>
               ) : (
