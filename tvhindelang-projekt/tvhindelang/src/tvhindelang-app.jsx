@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getFirestore, collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, onSnapshot, setDoc, serverTimestamp, query, orderBy } from "firebase/firestore";
-import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword } from "firebase/auth";
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 import { Analytics } from '@vercel/analytics/react';
 
 // ─── FIREBASE ────────────────────────────────────────────────
@@ -295,6 +295,19 @@ export default function TVHindelangApp() {
     try { await signInWithEmailAndPassword(auth, loginEmail, loginPassword); setLoginEmail(""); setLoginPassword(""); } 
     catch (e) { setLoginError("Falsche E-Mail oder falsches Passwort."); }
     setLoginLoading(false);
+  };
+
+  const handlePasswordReset = async () => {
+    // Hier prüfen wir jetzt auf loginEmail statt nur auf email
+    if (!loginEmail) {
+      return alert("Bitte gib zuerst deine E-Mail-Adresse oben in das Feld ein und klicke dann auf 'Passwort vergessen?'.");
+    }
+    try {
+      await sendPasswordResetEmail(auth, loginEmail);
+      alert("✅ Link gesendet! Bitte prüfe dein E-Mail-Postfach (und den Spam-Ordner), um ein neues Passwort festzulegen.");
+    } catch (error) {
+      alert("Fehler: " + error.message);
+    }
   };
 
   const handleRegister = async () => {
