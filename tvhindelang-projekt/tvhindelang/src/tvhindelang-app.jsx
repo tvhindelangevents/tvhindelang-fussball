@@ -363,8 +363,8 @@ export default function TVHindelangApp() {
         let ort = getVal(["ort", "stadt"]); let spielstaette = getVal(["spielstätte", "spielstaette"]);
         let mannschaftsart = getVal(["mannschaftsart", "team", "mannschaft"]); let staffel = getVal(["staffel", "liga"]);
         let typ = getVal(["spielkennung", "spielart", "typ", "spieltyp", "wettbewerb"]);
-        let spielNummer = getval(["spielnummer", "id"]);
-        let needsBus = getval(["bus"]).toLowerCase() === "ja";
+        let spielNummer = getVal(["spielnummer", "id"]);
+        let needsBus = getVal(["bus"]).toLowerCase() === "ja";
         if (!rawDate || !heim || !gast) continue; 
         let cleanDate = safeStr(rawDate).replace(/^[a-zA-ZäöüßÄÖÜ]{2}\.?\s*/, ''); let formattedDate = "";
         const deMatch = cleanDate.match(/(\d{1,2})\.(\d{1,2})\.?(\d{2,4})?/); const isoMatch = cleanDate.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);      
