@@ -363,8 +363,7 @@ export default function TVHindelangApp() {
         let ort = getVal(["ort", "stadt"]); let spielstaette = getVal(["spielstätte", "spielstaette"]);
         let mannschaftsart = getVal(["mannschaftsart", "team", "mannschaft"]); let staffel = getVal(["staffel", "liga"]);
         let typ = getVal(["spielkennung", "spielart", "typ", "spieltyp", "wettbewerb"]);
-        let spielNummer = getVal(["spielnummer", "id"]);
-let needsBus = (getVal(["bus"]) || "").toLowerCase() === "ja";
+
         if (!rawDate || !heim || !gast) continue; 
         let cleanDate = safeStr(rawDate).replace(/^[a-zA-ZäöüßÄÖÜ]{2}\.?\s*/, ''); let formattedDate = "";
         const deMatch = cleanDate.match(/(\d{1,2})\.(\d{1,2})\.?(\d{2,4})?/); const isoMatch = cleanDate.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);      
@@ -391,8 +390,7 @@ let needsBus = (getVal(["bus"]) || "").toLowerCase() === "ja";
         let extraInfos = []; if(typ) extraInfos.push(typ); if(staffel) extraInfos.push(`Staffel: ${staffel}`);
         let notesText = extraInfos.join(" | ") || "Automatisch importiert";
 
-        const eventId = spielNummer ? `bfv-${spielNummer}` : `manual-${Math.random().toString(36).substr(2, 9)}`;
-await setDoc(doc(db, "events", eventId), { type: "game", title, date: formattedDate, time: formattedTime, endTime: "", location: fullLocation, notes: notesText, team: finalTeamName, bus1: needsBus, bus2: false, declines: [], createdAt: serverTimestamp() });
+        await addDoc(collection(db, "events"), { type: "game", title, date: formattedDate, time: formattedTime, endTime: "", location: fullLocation, notes: notesText, team: finalTeamName, bus1: false, bus2: false, declines: [], createdAt: serverTimestamp() });
         count++;
       }
       alert(`${count} Spiele importiert!`); setIsImporting(false); if (csvInputRef.current) csvInputRef.current.value = ""; 
@@ -621,19 +619,15 @@ const deleteThread = async (th) => {
   // --- BUS- & SICHTBARKEITS-LOGIK ENDE ---
 
   const matchesFilter = (ev) => {
-    // Prüft, ob das Team des Events entweder:
-    // 1. "Alle Mannschaften" ausgewählt ist
-    // 2. Das Team exakt übereinstimmt
-    // 3. Es ein allgemeiner "Verein"-Termin ist
-    // 4. Es eine "Sonderbelegung" (Bus) ist
-    const teamMatch = 
-      filterTeam === "Alle Mannschaften" || 
-      safeStr(ev.team) === safeStr(filterTeam) || 
-      safeStr(ev.team) === "Verein" || 
-      safeStr(ev.team) === "Sonderbelegung";
+    if (!ev) return false;
 
+    // Unser neuer Filter: Zeigt ALLES an, was einen Bus hat
+    if (filterEventType === "only_bus") {
+      return ev.bus1 || ev.bus2 || ev.type === "bus_block";
+    }
+
+    const teamMatch = filterTeam === "Alle Mannschaften" || safeStr(ev.team) === safeStr(filterTeam);
     const typeMatch = filterEventType === "all" || safeStr(ev.type) === safeStr(filterEventType);
-    
     return teamMatch && typeMatch;
   };
   
@@ -1150,29 +1144,24 @@ const EventCard = ({ ev: rawEv, controls=true, showDate=false, onClick=null }) =
               )}
              <div style={{marginTop:20}}>
                 <div style={{fontSize:12,fontWeight:700,letterSpacing:1,color:B.midGrey,textTransform:"uppercase",marginBottom:10}}>Nächste Termine</div>
-                {events.filter(e=>e && (e.team===selectedTeam.name || e.team==="Verein" || e.team==="Sonderbelegung") && (e.date||"")>=todayStr).sort((a,b)=>safeStr(a.date).localeCompare(safeStr(b.date))).slice(0,4).map(ev=>(
-            <EventCard
-              key={ev.id || Math.random()}
-              ev={{
-                ...ev,
-                // HIER IST DIE ZENSUR: Wir überschreiben Titel und Gegner fliegend!
-                title: ev.team === "Sonderbelegung" && userData?.role !== 'admin' ? "Sonderbelegung Bus" : ev.title,
-                opponent: ev.team === "Sonderbelegung" && userData?.role !== 'admin' ? "" : ev.opponent
-              }}
-              controls={false}
-              showDate={true}
-              onClick={() => {
-                const d = new Date(ev.date);
-                if (!isNaN(d.getTime())) {
-                  setCurrentDate(new Date(d.getFullYear(), d.getMonth(), 1));
-                  setSelectedDay(d.getDate());
-                  setView("calendar");
-                  setSelectedTeam(null);
-                }
-              }}
-            />
-          ))}
-          {events.filter(e=>e && (e.team===selectedTeam.name || e.team==="Verein" || e.team==="Sonderbelegung") && (e.date||"")>=todayStr).length===0&&<div style={{fontSize:13,color:B.midGrey,fontFamily:"'Barlow',sans-serif"}}>Keine kommenden Termine</div>}
+                {events.filter(e=>e && e.team===selectedTeam.name&&(e.date||"")>=todayStr).sort((a,b)=>safeStr(a.date).localeCompare(safeStr(b.date))).slice(0,4).map(ev=>(
+                  <EventCard 
+                    key={ev.id || Math.random()} 
+                    ev={ev} 
+                    controls={false} 
+                    showDate={true}
+                    onClick={() => {
+                      const d = new Date(ev.date);
+                      if (!isNaN(d.getTime())) {
+                        setCurrentDate(new Date(d.getFullYear(), d.getMonth(), 1)); // Stellt den Kalendermonat ein
+                        setSelectedDay(d.getDate()); // Wählt exakt diesen Tag aus
+                        setView("calendar"); // Wechselt zum Kalender-Reiter
+                        setSelectedTeam(null); // Schließt die Team-Detailansicht
+                      }
+                    }}
+                  />
+                ))}
+                {events.filter(e=>e && e.team===selectedTeam.name&&(e.date||"")>=todayStr).length===0&&<div style={{fontSize:13,color:B.midGrey,fontFamily:"'Barlow',sans-serif"}}>Keine kommenden Termine</div>}
               </div>
             </div>
           </div>
