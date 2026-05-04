@@ -363,7 +363,7 @@ export default function TVHindelangApp() {
         let ort = getVal(["ort", "stadt"]); let spielstaette = getVal(["spielstätte", "spielstaette"]);
         let mannschaftsart = getVal(["mannschaftsart", "team", "mannschaft"]); let staffel = getVal(["staffel", "liga"]);
         let typ = getVal(["spielkennung", "spielart", "typ", "spieltyp", "wettbewerb"]);
-
+        let needsBus = getval(["bus"]).toLowerCase() === "ja";
         if (!rawDate || !heim || !gast) continue; 
         let cleanDate = safeStr(rawDate).replace(/^[a-zA-ZäöüßÄÖÜ]{2}\.?\s*/, ''); let formattedDate = "";
         const deMatch = cleanDate.match(/(\d{1,2})\.(\d{1,2})\.?(\d{2,4})?/); const isoMatch = cleanDate.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);      
@@ -390,7 +390,7 @@ export default function TVHindelangApp() {
         let extraInfos = []; if(typ) extraInfos.push(typ); if(staffel) extraInfos.push(`Staffel: ${staffel}`);
         let notesText = extraInfos.join(" | ") || "Automatisch importiert";
 
-        await addDoc(collection(db, "events"), { type: "game", title, date: formattedDate, time: formattedTime, endTime: "", location: fullLocation, notes: notesText, team: finalTeamName, bus1: false, bus2: false, declines: [], createdAt: serverTimestamp() });
+        await addDoc(collection(db, "events"), { type: "game", title, date: formattedDate, time: formattedTime, endTime: "", location: fullLocation, notes: notesText, team: finalTeamName, bus1: needsBus, bus2: false, declines: [], createdAt: serverTimestamp() });
         count++;
       }
       alert(`${count} Spiele importiert!`); setIsImporting(false); if (csvInputRef.current) csvInputRef.current.value = ""; 
