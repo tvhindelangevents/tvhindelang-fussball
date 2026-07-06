@@ -359,6 +359,8 @@ export default function TVHindelangApp() {
         const getVal = (exactMatches) => { let key = headers.find(h => exactMatches.includes(h)); return key ? row[key] : ""; };
 
         let rawDate = getVal(["spieldatum", "datum", "date"]); let rawTime = getVal(["uhrzeit", "zeit", "anstoßzeit"]);
+        let rawEndTime = getVal(["endzeit", "endtime"]);
+        let bus1Raw = getVal(["bus1", "bus"]); let bus2Raw = getVal(["bus2", "busse"]);
         let heim = getVal(["heimmannschaft", "heim"]); let gast = getVal(["gastmannschaft", "gast", "gegner"]);
         let ort = getVal(["ort", "stadt"]); let spielstaette = getVal(["spielstätte", "spielstaette"]);
         let mannschaftsart = getVal(["mannschaftsart", "team", "mannschaft"]); let staffel = getVal(["staffel", "liga"]);
@@ -372,8 +374,10 @@ export default function TVHindelangApp() {
         else continue; 
         if (isNaN(new Date(formattedDate).getTime())) continue;
 
-        let formattedTime = "12:00"; 
+        let formattedTime = "12:00";
         if (rawTime) { let tClean = safeStr(rawTime).replace(".", ":").trim(); const tMatch = tClean.match(/(\d{1,2}):(\d{2})/); if (tMatch) formattedTime = `${tMatch[1].padStart(2, '0')}:${tMatch[2]}`; }
+        let formattedEndTime = "";
+        if (rawEndTime) { let etClean = safeStr(rawEndTime).replace(".", ":").trim(); const etMatch = etClean.match(/(\d{1,2}):(\d{2})/); if (etMatch) formattedEndTime = `${etMatch[1].padStart(2, '0')}:${etMatch[2]}`; }
         let fullLocation = [spielstaette, ort].filter(Boolean).join(", ") || "Ort unbekannt";
         let title = `${heim} vs. ${gast}`; let teamNameRaw = safeStr(mannschaftsart || "Verein"); 
         if (safeStr(heim).toLowerCase().includes("hindelang") || safeStr(heim).toLowerCase().includes("tvh") || safeStr(heim).toLowerCase().includes("tv ")) { title = `Heimspiel vs. ${gast}`; } 
@@ -390,7 +394,7 @@ export default function TVHindelangApp() {
         let extraInfos = []; if(typ) extraInfos.push(typ); if(staffel) extraInfos.push(`Staffel: ${staffel}`);
         let notesText = extraInfos.join(" | ") || "Automatisch importiert";
 
-        await addDoc(collection(db, "events"), { type: "game", title, date: formattedDate, time: formattedTime, endTime: "", location: fullLocation, notes: notesText, team: finalTeamName, bus1: false, bus2: false, declines: [], createdAt: serverTimestamp() });
+        await addDoc(collection(db, "events"), { type: "game", title, date: formattedDate, time: formattedTime, endTime: formattedEndTime, location: fullLocation, notes: notesText, team: finalTeamName, bus1: bus1Raw === "true" || bus1Raw === "1", bus2: bus2Raw === "true" || bus2Raw === "1", declines: [], createdAt: serverTimestamp() });
         count++;
       }
       alert(`${count} Spiele importiert!`); setIsImporting(false); if (csvInputRef.current) csvInputRef.current.value = ""; 
