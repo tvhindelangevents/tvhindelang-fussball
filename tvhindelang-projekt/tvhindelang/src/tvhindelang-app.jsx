@@ -191,7 +191,7 @@ export default function TVHindelangApp() {
 
   const [activeThread, setActiveThread] = useState(null);
   const [chatInput, setChatInput]       = useState("");
-  const chatEndRef = useRef(null);
+  const chatScrollRef = useRef(null);
   const csvInputRef = useRef(null);
   const [isImporting, setIsImporting] = useState(false);
   const [fullscreenImage, setFullscreenImage] = useState(null);
@@ -307,7 +307,12 @@ export default function TVHindelangApp() {
     if (fresh) setActiveThread(fresh);
   }, [threads, activeThread?.id]);
 
-  useEffect(() => { chatEndRef.current?.scrollIntoView({behavior:"smooth"}); }, [activeThread]);
+  // Nur den Nachrichtenbereich scrollen. scrollIntoView wuerde jeden scrollbaren
+  // Container drumherum mitziehen und damit die ganze Seite verschieben.
+  useEffect(() => {
+    const el = chatScrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [activeThread?.id, activeThread?.messages?.length]);
 
   const handleLogin = async () => {
     setLoginLoading(true); setLoginError("");
@@ -1235,7 +1240,7 @@ const EventCard = ({ ev: rawEv, controls=true, showDate=false, onClick=null }) =
                       <div style={{flex: 1, minWidth: 0}}><div style={{fontWeight:800,fontSize:15}}>{activeThread.type === "direct" ? safeStr(allUsers.find(u => u.id === (Array.isArray(activeThread.participants) ? activeThread.participants.find(id => id !== user.uid) : user.uid))?.name || "Benutzer") : safeStr(activeThread.label)}</div><div style={{fontSize:11,color:B.midGrey}}>{activeThread.type==="group"?`Gruppen-Chat · ${safeStr(activeThread.team)}`:"Direktnachricht"}</div></div>
                       {isAdmin && <button className="btn btn-danger" style={{padding:"6px 10px"}} onClick={()=>deleteThread(activeThread)}>🗑️</button>}
                     </div>
-                    <div style={{flex:1,overflow:"auto",padding:20,display:"flex",flexDirection:"column",gap:10,background:B.offWhite}}>
+                    <div ref={chatScrollRef} style={{flex:1,overflow:"auto",padding:20,display:"flex",flexDirection:"column",gap:10,background:B.offWhite}}>
                       {(!Array.isArray(activeThread.messages)||activeThread.messages.length===0)&&<div style={{textAlign:"center",color:B.midGrey,padding:"40px 0",fontSize:14}}>Noch keine Nachrichten</div>}
                       {Array.isArray(activeThread.messages) && activeThread.messages.map((msg,i)=>{
                         if (!msg) return null; const myProfile = allUsers.find(u => u.id === user.uid); const isMe = msg.uid ? msg.uid === user.uid : msg.from === (myProfile?.name || user.email);
@@ -1250,7 +1255,6 @@ const EventCard = ({ ev: rawEv, controls=true, showDate=false, onClick=null }) =
                           </div>
                         );
                       })}
-                      <div ref={chatEndRef}/>
                     </div>
                     <div style={{padding:"12px 16px",borderTop:`1.5px solid ${B.lightGrey}`,display:"flex",gap:10,background:B.white,flexShrink:0}}><input className="input" placeholder="Nachricht schreiben..." value={chatInput} onChange={e=>setChatInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&sendMessage()} style={{flex:1}}/><button className="btn btn-primary" style={{flexShrink:0,padding:"9px 20px"}} onClick={sendMessage}>➤</button></div>
                   </>
