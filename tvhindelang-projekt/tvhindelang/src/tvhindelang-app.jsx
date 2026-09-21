@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getFirestore, collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, onSnapshot, setDoc, serverTimestamp, query, orderBy, arrayUnion } from "firebase/firestore";
+import { getFirestore, collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, onSnapshot, setDoc, serverTimestamp, query, orderBy, arrayUnion, where } from "firebase/firestore";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 import { Analytics } from '@vercel/analytics/react';
 
@@ -144,7 +144,10 @@ export default function TVHindelangApp() {
   const [events, setEvents]   = useState([]);
   const [teams, setTeams]     = useState(INIT_TEAMS);
   const [news, setNews]       = useState([]);
-  const [threads, setThreads] = useState([]);
+  const [groupThreads, setGroupThreads]   = useState([]);
+  const [directThreads, setDirectThreads] = useState([]);
+  // useMemo haelt die Identitaet stabil, solange sich keine Abfrage aendert
+  const threads = useMemo(() => [...groupThreads, ...directThreads], [groupThreads, directThreads]);
   const [allUsers, setAllUsers] = useState([]); 
   const [introText, setIntroText] = useState(INIT_INTRO);
   const [kunstrasenData, setKunstrasenData] = useState(null);
@@ -247,7 +250,12 @@ export default function TVHindelangApp() {
     unsubs.push(onSnapshot(query(collection(db,"events"), orderBy("date")), snap => setEvents(snap.docs.map(d=>({id:d.id,...d.data()})))));
     unsubs.push(onSnapshot(collection(db,"teams"), snap => setTeams(snap.docs.map(d=>({id:d.id,...d.data()})))));
     unsubs.push(onSnapshot(query(collection(db,"news"), orderBy("date","desc")), snap => setNews(snap.docs.map(d=>({id:d.id,...d.data()})))));
-    unsubs.push(onSnapshot(collection(db,"threads"), snap => setThreads(snap.docs.map(d=>({id:d.id,...d.data(),messages:d.data().messages||[]})))));
+    // Zwei gezielte Abfragen statt eines Sammelabrufs: Firestore-Regeln filtern nicht,
+    // sie lehnen eine Abfrage ab, sobald nicht jeder Treffer garantiert erlaubt ist.
+    // Jede Abfrage entspricht genau einem erlaubten Zweig der threads-Regel.
+    const mapThreads = snap => snap.docs.map(d=>({id:d.id,...d.data(),messages:d.data().messages||[]}));
+    unsubs.push(onSnapshot(query(collection(db,"threads"), where("type","==","group")), snap => setGroupThreads(mapThreads(snap))));
+    unsubs.push(onSnapshot(query(collection(db,"threads"), where("participants","array-contains",user.uid)), snap => setDirectThreads(mapThreads(snap))));
     unsubs.push(onSnapshot(collection(db,"users"), snap => setAllUsers(snap.docs.map(d=>({id:d.id,...d.data()})))));
     unsubs.push(onSnapshot(doc(db,"settings","intro"), snap => { if (snap.exists()) setIntroText(snap.data().text || INIT_INTRO); }));
     unsubs.push(onSnapshot(doc(db,"settings","kunstrasen"), snap => { if (snap.exists()) setKunstrasenData(snap.data()); }));
