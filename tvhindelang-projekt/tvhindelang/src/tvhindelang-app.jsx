@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getFirestore, collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, onSnapshot, setDoc, serverTimestamp, query, orderBy } from "firebase/firestore";
+import { getFirestore, collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, onSnapshot, setDoc, serverTimestamp, query, orderBy, arrayUnion, where } from "firebase/firestore";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 import { Analytics } from '@vercel/analytics/react';
 
@@ -144,7 +144,10 @@ export default function TVHindelangApp() {
   const [events, setEvents]   = useState([]);
   const [teams, setTeams]     = useState(INIT_TEAMS);
   const [news, setNews]       = useState([]);
-  const [threads, setThreads] = useState([]);
+  const [groupThreads, setGroupThreads]   = useState([]);
+  const [directThreads, setDirectThreads] = useState([]);
+  // useMemo haelt die Identitaet stabil, solange sich keine Abfrage aendert
+  const threads = useMemo(() => [...groupThreads, ...directThreads], [groupThreads, directThreads]);
   const [allUsers, setAllUsers] = useState([]); 
   const [introText, setIntroText] = useState(INIT_INTRO);
   const [kunstrasenData, setKunstrasenData] = useState(null);
@@ -247,7 +250,12 @@ export default function TVHindelangApp() {
     unsubs.push(onSnapshot(query(collection(db,"events"), orderBy("date")), snap => setEvents(snap.docs.map(d=>({id:d.id,...d.data()})))));
     unsubs.push(onSnapshot(collection(db,"teams"), snap => setTeams(snap.docs.map(d=>({id:d.id,...d.data()})))));
     unsubs.push(onSnapshot(query(collection(db,"news"), orderBy("date","desc")), snap => setNews(snap.docs.map(d=>({id:d.id,...d.data()})))));
-    unsubs.push(onSnapshot(collection(db,"threads"), snap => setThreads(snap.docs.map(d=>({id:d.id,...d.data(),messages:d.data().messages||[]})))));
+    // Zwei gezielte Abfragen statt eines Sammelabrufs: Firestore-Regeln filtern nicht,
+    // sie lehnen eine Abfrage ab, sobald nicht jeder Treffer garantiert erlaubt ist.
+    // Jede Abfrage entspricht genau einem erlaubten Zweig der threads-Regel.
+    const mapThreads = snap => snap.docs.map(d=>({id:d.id,...d.data(),messages:d.data().messages||[]}));
+    unsubs.push(onSnapshot(query(collection(db,"threads"), where("type","==","group")), snap => setGroupThreads(mapThreads(snap))));
+    unsubs.push(onSnapshot(query(collection(db,"threads"), where("participants","array-contains",user.uid)), snap => setDirectThreads(mapThreads(snap))));
     unsubs.push(onSnapshot(collection(db,"users"), snap => setAllUsers(snap.docs.map(d=>({id:d.id,...d.data()})))));
     unsubs.push(onSnapshot(doc(db,"settings","intro"), snap => { if (snap.exists()) setIntroText(snap.data().text || INIT_INTRO); }));
     unsubs.push(onSnapshot(doc(db,"settings","kunstrasen"), snap => { if (snap.exists()) setKunstrasenData(snap.data()); }));
@@ -269,13 +277,17 @@ export default function TVHindelangApp() {
       // Wir nehmen den Namen (z.B. "Herren 1"), nicht die ID
       const teamName = selectedTeamObj ? selectedTeamObj.name : "";
       
-      const assigned = (onboardingForm.role === "sponsor" || onboardingForm.role === "player_inactive") 
-                       ? [] 
-                       : [teamName]; 
-      
+      const assigned = (onboardingForm.role === "sponsor" || onboardingForm.role === "player_inactive")
+                       ? []
+                       : [teamName];
+
+      // Trainer- und Admin-Rechte vergibt ausschliesslich ein Admin, nie der Nutzer selbst
+      const SELF_ASSIGNABLE_ROLES = ["player", "parent", "player_inactive", "sponsor"];
+      const safeRole = SELF_ASSIGNABLE_ROLES.includes(onboardingForm.role) ? onboardingForm.role : "player";
+
       // Wir speichern die Rolle in der Datenbank ab (mit user.uid)
       await setDoc(doc(db, "users", user.uid), {
-        role: onboardingForm.role,
+        role: safeRole,
         assignedTeams: assigned,
         needsOnboarding: false,
         name: user.displayName || user.email || "Neuer Nutzer" // Falls der Name noch fehlt
@@ -287,6 +299,13 @@ export default function TVHindelangApp() {
       setSavingOnboarding(false);
     }
   };
+
+  // Offenen Chat an die Live-Daten koppeln, damit neue Nachrichten sofort erscheinen
+  useEffect(() => {
+    if (!activeThread?.id) return;
+    const fresh = (threads || []).find(t => t?.id === activeThread.id);
+    if (fresh) setActiveThread(fresh);
+  }, [threads, activeThread?.id]);
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({behavior:"smooth"}); }, [activeThread]);
 
@@ -333,7 +352,11 @@ export default function TVHindelangApp() {
     setIsImporting(true);
     const reader = new FileReader();
     reader.onload = async (event) => {
-      const text = event.target.result;
+      // Gemini liefert UTF-8, BFV-Exporte Windows-1252. Schlaegt UTF-8 fehl, ist es Windows-1252.
+      let text;
+      try { text = new TextDecoder("utf-8", { fatal: true }).decode(event.target.result); }
+      catch { text = new TextDecoder("windows-1252").decode(event.target.result); }
+      if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
       const lines = text.split(/\r?\n/).filter(line => line.trim() !== "");
       if (lines.length < 2) { alert("Datei leer oder ohne Überschriften."); setIsImporting(false); return; }
 
@@ -353,6 +376,9 @@ export default function TVHindelangApp() {
 
       const headers = parseRow(lines[0]).map(h => safeStr(h).toLowerCase());
       let count = 0;
+      let skipped = 0;
+      const eventKey = (date, time, title) => `${safeStr(date)}|${safeStr(time)}|${safeStr(title).toLowerCase().trim()}`;
+      const seenKeys = new Set((events || []).map(e => eventKey(e?.date, e?.time, e?.title)));
       for (let i = 1; i < lines.length; i++) {
         const values = parseRow(lines[i]); const row = {};
         headers.forEach((header, index) => { row[header] = values[index] || ""; });
@@ -391,15 +417,19 @@ export default function TVHindelangApp() {
         });
         if (matchedTeam) finalTeamName = matchedTeam.name; else finalTeamName = teamNameRaw.replace(/Junioren/g, "Jugend").replace(/Juniorinnen/g, "Mädchen");
 
+        const key = eventKey(formattedDate, formattedTime, title);
+        if (seenKeys.has(key)) { skipped++; continue; }
+        seenKeys.add(key);
+
         let extraInfos = []; if(typ) extraInfos.push(typ); if(staffel) extraInfos.push(`Staffel: ${staffel}`);
         let notesText = extraInfos.join(" | ") || "Automatisch importiert";
 
         await addDoc(collection(db, "events"), { type: "game", title, date: formattedDate, time: formattedTime, endTime: formattedEndTime, location: fullLocation, notes: notesText, team: finalTeamName, bus1: bus1Raw === "true" || bus1Raw === "1", bus2: bus2Raw === "true" || bus2Raw === "1", declines: [], createdAt: serverTimestamp() });
         count++;
       }
-      alert(`${count} Spiele importiert!`); setIsImporting(false); if (csvInputRef.current) csvInputRef.current.value = ""; 
+      alert(skipped > 0 ? `${count} Spiele importiert, ${skipped} Doppler übersprungen.` : `${count} Spiele importiert!`); setIsImporting(false); if (csvInputRef.current) csvInputRef.current.value = "";
     };
-    reader.readAsText(file, "windows-1252");
+    reader.readAsArrayBuffer(file);
   };
 
   const shareEventWhatsApp = (ev) => {
@@ -536,10 +566,11 @@ export default function TVHindelangApp() {
   const sendMessage = async () => {
     if (!chatInput.trim()||!activeThread) return;
     const myProfile = allUsers.find(u => u.id === user.uid); const senderName = myProfile?.name || user.email;
-    const msg = { from: senderName, text: chatInput, time: new Date().toLocaleTimeString("de",{hour:"2-digit",minute:"2-digit"}), timestamp: Date.now() };
-    const updated = [...(activeThread.messages||[]), msg];
-    await updateDoc(doc(db,"threads",activeThread.id), { messages: updated, [`readReceipts.${user.uid}`]: Date.now() });
-    setActiveThread({...activeThread, messages: updated}); setChatInput("");
+    const msg = { from: senderName, uid: user.uid, text: chatInput, time: new Date().toLocaleTimeString("de",{hour:"2-digit",minute:"2-digit"}), timestamp: Date.now() };
+    // arrayUnion haengt serverseitig an, statt die ganze Liste zu ueberschreiben:
+    // so gehen bei gleichzeitig gesendeten Nachrichten keine mehr verloren.
+    await updateDoc(doc(db,"threads",activeThread.id), { messages: arrayUnion(msg), [`readReceipts.${user.uid}`]: Date.now() });
+    setChatInput("");
   };
 
   const createThread = async () => {
@@ -567,8 +598,8 @@ const deleteThread = async (th) => {
   const deleteMessage = async (msgIndex) => {
     const msg = activeThread.messages[msgIndex];
     const myProfile = allUsers.find(u => u.id === user.uid);
-    const isMe = msg.from === (myProfile?.name || user.email);
-    
+    const isMe = msg.uid ? msg.uid === user.uid : msg.from === (myProfile?.name || user.email);
+
     if (!isAdmin && !isMe) return alert("Du darfst nur deine eigenen Nachrichten löschen.");
     
     if(window.confirm("Nachricht löschen?")) {
@@ -1207,7 +1238,7 @@ const EventCard = ({ ev: rawEv, controls=true, showDate=false, onClick=null }) =
                     <div style={{flex:1,overflow:"auto",padding:20,display:"flex",flexDirection:"column",gap:10,background:B.offWhite}}>
                       {(!Array.isArray(activeThread.messages)||activeThread.messages.length===0)&&<div style={{textAlign:"center",color:B.midGrey,padding:"40px 0",fontSize:14}}>Noch keine Nachrichten</div>}
                       {Array.isArray(activeThread.messages) && activeThread.messages.map((msg,i)=>{
-                        if (!msg) return null; const myProfile = allUsers.find(u => u.id === user.uid); const isMe = msg.from === (myProfile?.name || user.email);
+                        if (!msg) return null; const myProfile = allUsers.find(u => u.id === user.uid); const isMe = msg.uid ? msg.uid === user.uid : msg.from === (myProfile?.name || user.email);
                         return (
                           <div key={i} style={{display:"flex",flexDirection:"column",alignItems:isMe?"flex-end":"flex-start"}}>
                             {!isMe&&<div style={{fontSize:11,color:B.midGrey,marginBottom:2,fontWeight:600}}>{safeStr(msg.from)}</div>}
@@ -1635,7 +1666,6 @@ const EventCard = ({ ev: rawEv, controls=true, showDate=false, onClick=null }) =
                 <label style={LBL}>Wer bist du?</label>
                 <select className="input" value={onboardingForm.role} onChange={e=>setOnboardingForm({...onboardingForm, role:e.target.value})}>
                   <option value="player">Spieler:in (Aktiv)</option>
-                  <option value="trainer">Trainer:in</option>
                   <option value="parent">Elternteil</option>
                   <option value="player_inactive">Spieler:in (Inaktiv / Passiv)</option>
                   <option value="sponsor">Sponsor / Fan</option>
